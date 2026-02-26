@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="tailGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00cc99" stop-opacity="1" />
+      <stop offset="100%" stop-color="#009977" stop-opacity="1" />
+    </linearGradient>
+    <pattern id="pattern" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="16" cy="16" r="8" fill="#ffffff" fill-opacity="0.1" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#tailGradient)" />
+  <rect width="256" height="256" fill="url(#pattern)" />
+</svg> 

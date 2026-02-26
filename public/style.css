@@ -1,0 +1,10 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent scrollbars if canvas slightly overlaps */
+    height: 100%; /* Ensure body takes full height */
+}
+
+canvas {
+    display: block; /* Prevent potential extra space below canvas */
+} 
