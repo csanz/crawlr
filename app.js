@@ -38,6 +38,7 @@ import { StormTheme } from './libs/themes/StormTheme.js';
 import { initThemeAdmin } from './libs/ThemeAdmin.js';
 import { initPowerUpHUD } from './libs/PowerUpHUD.js';
 import { loadMap } from './libs/MapLoader.js';
+import { createClouds, updateClouds } from './libs/Clouds.js';
 import { RoundManager } from './libs/RoundManager.js';
 import { initRoundHUD, hideRoundHUD, showRoundHUD } from './libs/RoundHUD.js';
 import { showPodiumScreen } from './libs/PodiumScreen.js';
@@ -115,6 +116,7 @@ async function startGame(playerName) {
     const groundPlane = createGround(scene, world, renderer);
     createBorderMountains(scene, world, mapData);
     createBoulders(scene, world, mapData ? mapData.boulders : null);
+    createClouds(scene);
     DefaultTheme.apply(scene);
     const { playerMesh, playerBody } = createPlayer(scene, world, renderer);
     playerBody.userData = { type: 'player' };

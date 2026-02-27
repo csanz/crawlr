@@ -9,7 +9,15 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "keywords": ["game", "3d", "threejs", "snake", "slither", "webgl", "physics"],
+  "keywords": [
+    "game",
+    "3d",
+    "threejs",
+    "snake",
+    "slither",
+    "webgl",
+    "physics"
+  ],
   "license": "MIT",
   "dependencies": {
     "@dimforge/rapier3d": "^0.15.1",
@@ -17,6 +25,7 @@
     "three": "^0.175.0"
   },
   "devDependencies": {
+    "playwright": "^1.58.2",
     "vite": "^6.3.2",
     "vite-plugin-wasm": "^3.4.1"
   },

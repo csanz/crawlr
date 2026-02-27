@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crawlr OG Image</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    font-family: 'Fredoka', sans-serif;
+}
+.og-container {
+    width: 1200px;
+    height: 630px;
+    position: relative;
+    background: linear-gradient(180deg, #87CEEB 0%, #AAD8F0 35%, #7EC87E 55%, #5A9A3C 100%);
+    overflow: hidden;
+}
+
+/* Clouds */
+.cloud {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+.cloud-blob {
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+/* Mountains */
+.mountains {
+    position: absolute;
+    bottom: 160px;
+    left: 0; right: 0;
+    height: 140px;
+}
+.mountain {
+    position: absolute;
+    bottom: 0;
+    width: 0; height: 0;
+    border-left: solid transparent;
+    border-right: solid transparent;
+    border-bottom-style: solid;
+}
+
+/* Ground */
+.ground {
+    position: absolute;
+    bottom: 0;
+    left: 0; right: 0;
+    height: 220px;
+    background: linear-gradient(180deg, #6DB86D 0%, #4D9E3B 40%, #3D8A2E 100%);
+}
+.ground-stripe {
+    position: absolute;
+    height: 3px;
+    background: rgba(0,0,0,0.06);
+    border-radius: 2px;
+}
+
+/* Coins scattered */
+.coin {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #FFE766, #FFD700, #DAA520);
+    box-shadow: 0 2px 8px rgba(255,215,0,0.5);
+}
+
+/* Rings */
+.ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 6px solid #FF8C00;
+    box-shadow: 0 0 12px rgba(255,140,0,0.3);
+}
+
+/* Boulders */
+.boulder {
+    position: absolute;
+    background: #8a8580;
+    border-radius: 30% 50% 40% 60%;
+    box-shadow: inset -4px -4px 0 rgba(0,0,0,0.15);
+}
+
+/* Trees */
+.tree {
+    position: absolute;
+}
+.tree-trunk {
+    margin: 0 auto;
+    background: #6B4226;
+    border-radius: 2px;
+    box-shadow: inset -3px 0 0 rgba(0,0,0,0.15);
+}
+.tree-crown {
+    width: 0; height: 0;
+    border-left: solid transparent;
+    border-right: solid transparent;
+    border-bottom-style: solid;
+    margin: 0 auto -6px;
+}
+
+/* Character */
+.character {
+    position: absolute;
+    display: flex;
+    align-items: flex-end;
+    gap: 5px;
+}
+.char-body {
+    position: relative;
+    border-radius: 12px;
+    box-shadow: inset -4px -4px 0 rgba(0,0,0,0.12), 3px 4px 10px rgba(0,0,0,0.2);
+}
+.char-eye {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+.char-pupil {
+    position: absolute;
+    background: #222;
+    border-radius: 50%;
+}
+.char-pupil-shine {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+}
+.char-mouth {
+    position: absolute;
+    border-bottom: 3px solid rgba(0,0,0,0.2);
+    border-radius: 0 0 8px 8px;
+}
+.tail-seg {
+    border-radius: 8px;
+    box-shadow: inset -3px -3px 0 rgba(0,0,0,0.12), 2px 3px 6px rgba(0,0,0,0.15);
+}
+
+/* Title area */
+.title-area {
+    position: absolute;
+    top: 50px;
+    left: 0; right: 0;
+    text-align: center;
+    z-index: 10;
+}
+.title {
+    font-size: 96px;
+    font-weight: 700;
+    color: #4CAF50;
+    text-shadow: 3px 5px 0 rgba(0,0,0,0.1);
+    letter-spacing: 4px;
+}
+.subtitle {
+    font-size: 24px;
+    color: rgba(255,255,255,0.9);
+    text-shadow: 1px 2px 4px rgba(0,0,0,0.15);
+    margin-top: 4px;
+}
+
+/* Feature pills */
+.pills {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+.pill {
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 16px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* URL */
+.url {
+    position: absolute;
+    bottom: 20px;
+    right: 30px;
+    font-size: 18px;
+    color: rgba(255,255,255,0.7);
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+    z-index: 10;
+}
+</style>
+</head>
+<body>
+<div class="og-container">
+
+    <!-- Clouds -->
+    <div class="cloud" style="left:80px; top:40px;">
+        <div class="cloud-blob" style="width:60px; height:40px;"></div>
+        <div class="cloud-blob" style="width:80px; height:55px; margin-left:-20px; margin-top:-10px;"></div>
+        <div class="cloud-blob" style="width:55px; height:38px; margin-left:-15px;"></div>
+    </div>
+    <div class="cloud" style="left:700px; top:25px;">
+        <div class="cloud-blob" style="width:50px; height:35px;"></div>
+        <div class="cloud-blob" style="width:70px; height:50px; margin-left:-18px; margin-top:-8px;"></div>
+        <div class="cloud-blob" style="width:60px; height:40px; margin-left:-16px;"></div>
+        <div class="cloud-blob" style="width:40px; height:30px; margin-left:-12px;"></div>
+    </div>
+    <div class="cloud" style="left:1000px; top:65px;">
+        <div class="cloud-blob" style="width:45px; height:32px;"></div>
+        <div class="cloud-blob" style="width:60px; height:42px; margin-left:-14px; margin-top:-6px;"></div>
+        <div class="cloud-blob" style="width:40px; height:30px; margin-left:-10px;"></div>
+    </div>
+
+    <!-- Mountains (back) -->
+    <div class="mountains">
+        <div class="mountain" style="left:0px; border-left-width:70px; border-right-width:70px; border-bottom-width:100px; border-bottom-color:#4a6a4a;"></div>
+        <div class="mountain" style="left:100px; border-left-width:90px; border-right-width:90px; border-bottom-width:130px; border-bottom-color:#3d5d3d;"></div>
+        <div class="mountain" style="left:250px; border-left-width:60px; border-right-width:60px; border-bottom-width:90px; border-bottom-color:#4a6a4a;"></div>
+        <div class="mountain" style="left:380px; border-left-width:80px; border-right-width:80px; border-bottom-width:110px; border-bottom-color:#3d5d3d;"></div>
+        <div class="mountain" style="left:520px; border-left-width:70px; border-right-width:70px; border-bottom-width:95px; border-bottom-color:#4a6a4a;"></div>
+        <div class="mountain" style="left:650px; border-left-width:95px; border-right-width:95px; border-bottom-width:135px; border-bottom-color:#3a5a3a;"></div>
+        <div class="mountain" style="left:820px; border-left-width:65px; border-right-width:65px; border-bottom-width:85px; border-bottom-color:#4a6a4a;"></div>
+        <div class="mountain" style="left:930px; border-left-width:85px; border-right-width:85px; border-bottom-width:120px; border-bottom-color:#3d5d3d;"></div>
+        <div class="mountain" style="left:1060px; border-left-width:75px; border-right-width:75px; border-bottom-width:100px; border-bottom-color:#4a6a4a;"></div>
+    </div>
+
+    <!-- Trees -->
+    <div class="tree" style="left:60px; bottom:200px;">
+        <div class="tree-crown" style="border-left-width:14px; border-right-width:14px; border-bottom-width:22px; border-bottom-color:#2d5a1e;"></div>
+        <div class="tree-crown" style="border-left-width:18px; border-right-width:18px; border-bottom-width:24px; border-bottom-color:#357a25;"></div>
+        <div class="tree-trunk" style="width:8px; height:16px;"></div>
+    </div>
+    <div class="tree" style="left:160px; bottom:210px; transform:scale(0.8);">
+        <div class="tree-crown" style="border-left-width:14px; border-right-width:14px; border-bottom-width:22px; border-bottom-color:#2d5a1e;"></div>
+        <div class="tree-crown" style="border-left-width:18px; border-right-width:18px; border-bottom-width:24px; border-bottom-color:#357a25;"></div>
+        <div class="tree-trunk" style="width:8px; height:16px;"></div>
+    </div>
+    <div class="tree" style="right:80px; bottom:195px;">
+        <div class="tree-crown" style="border-left-width:16px; border-right-width:16px; border-bottom-width:25px; border-bottom-color:#2d5a1e;"></div>
+        <div class="tree-crown" style="border-left-width:20px; border-right-width:20px; border-bottom-width:26px; border-bottom-color:#357a25;"></div>
+        <div class="tree-trunk" style="width:9px; height:18px;"></div>
+    </div>
+    <div class="tree" style="right:180px; bottom:205px; transform:scale(0.75);">
+        <div class="tree-crown" style="border-left-width:14px; border-right-width:14px; border-bottom-width:22px; border-bottom-color:#2d5a1e;"></div>
+        <div class="tree-crown" style="border-left-width:18px; border-right-width:18px; border-bottom-width:24px; border-bottom-color:#357a25;"></div>
+        <div class="tree-trunk" style="width:8px; height:16px;"></div>
+    </div>
+
+    <!-- Ground -->
+    <div class="ground">
+        <div class="ground-stripe" style="top:40px; left:100px; width:200px;"></div>
+        <div class="ground-stripe" style="top:80px; left:500px; width:150px;"></div>
+        <div class="ground-stripe" style="top:60px; left:800px; width:180px;"></div>
+        <div class="ground-stripe" style="top:110px; left:300px; width:120px;"></div>
+    </div>
+
+    <!-- Boulders -->
+    <div class="boulder" style="left:180px; bottom:140px; width:40px; height:32px;"></div>
+    <div class="boulder" style="right:220px; bottom:120px; width:50px; height:38px;"></div>
+    <div class="boulder" style="left:820px; bottom:155px; width:30px; height:24px;"></div>
+
+    <!-- Coins -->
+    <div class="coin" style="left:320px; bottom:260px; width:18px; height:18px;"></div>
+    <div class="coin" style="left:420px; bottom:230px; width:16px; height:16px;"></div>
+    <div class="coin" style="left:520px; bottom:280px; width:18px; height:18px;"></div>
+    <div class="coin" style="right:350px; bottom:240px; width:14px; height:14px;"></div>
+    <div class="coin" style="left:700px; bottom:310px; width:16px; height:16px;"></div>
+    <div class="coin" style="left:280px; bottom:310px; width:14px; height:14px;"></div>
+    <div class="coin" style="left:880px; bottom:250px; width:16px; height:16px;"></div>
+
+    <!-- Ring -->
+    <div class="ring" style="right:300px; bottom:260px; width:50px; height:50px;"></div>
+
+    <!-- Main character (center) -->
+    <div class="character" style="left:480px; bottom:230px;">
+        <!-- Tail segments -->
+        <div class="tail-seg" style="width:24px; height:24px; background:#8B6914;"></div>
+        <div class="tail-seg" style="width:30px; height:30px; background:#9A7816;"></div>
+        <div class="tail-seg" style="width:36px; height:36px; background:#A88A1C;"></div>
+
+        <!-- Body -->
+        <div class="char-body" style="width:64px; height:64px; background:linear-gradient(145deg, #5BCC5B, #4CAF50);">
+            <!-- Left eye -->
+            <div class="char-eye" style="width:18px; height:18px; top:12px; left:12px;">
+                <div class="char-pupil" style="width:10px; height:10px; top:5px; left:5px;">
+                    <div class="char-pupil-shine" style="width:4px; height:4px; top:1px; left:6px;"></div>
+                </div>
+            </div>
+            <!-- Right eye -->
+            <div class="char-eye" style="width:18px; height:18px; top:12px; right:12px;">
+                <div class="char-pupil" style="width:10px; height:10px; top:5px; left:5px;">
+                    <div class="char-pupil-shine" style="width:4px; height:4px; top:1px; left:6px;"></div>
+                </div>
+            </div>
+            <!-- Mouth -->
+            <div class="char-mouth" style="bottom:14px; left:50%; transform:translateX(-50%); width:16px; height:8px;"></div>
+        </div>
+    </div>
+
+    <!-- Bot character (left side) -->
+    <div class="character" style="left:140px; bottom:170px; transform:scale(0.65);">
+        <div class="tail-seg" style="width:20px; height:20px; background:#1a5a8a;"></div>
+        <div class="tail-seg" style="width:26px; height:26px; background:#1a6aaa;"></div>
+        <div class="char-body" style="width:48px; height:48px; background:linear-gradient(145deg, #4488CC, #3377BB);">
+            <div class="char-eye" style="width:14px; height:14px; top:10px; left:8px;">
+                <div class="char-pupil" style="width:8px; height:8px; top:4px; left:4px;">
+                    <div class="char-pupil-shine" style="width:3px; height:3px; top:1px; left:5px;"></div>
+                </div>
+            </div>
+            <div class="char-eye" style="width:14px; height:14px; top:10px; right:8px;">
+                <div class="char-pupil" style="width:8px; height:8px; top:4px; left:4px;">
+                    <div class="char-pupil-shine" style="width:3px; height:3px; top:1px; left:5px;"></div>
+                </div>
+            </div>
+            <div class="char-mouth" style="bottom:10px; left:50%; transform:translateX(-50%); width:12px; height:6px;"></div>
+        </div>
+    </div>
+
+    <!-- Bot character (right side) -->
+    <div class="character" style="right:160px; bottom:180px; transform:scale(0.55) scaleX(-1);">
+        <div class="tail-seg" style="width:18px; height:18px; background:#8a1a5a;"></div>
+        <div class="tail-seg" style="width:24px; height:24px; background:#aa2a6a;"></div>
+        <div class="char-body" style="width:44px; height:44px; background:linear-gradient(145deg, #DD66AA, #CC5599);">
+            <div class="char-eye" style="width:13px; height:13px; top:8px; left:7px;">
+                <div class="char-pupil" style="width:7px; height:7px; top:4px; left:4px;">
+                    <div class="char-pupil-shine" style="width:3px; height:3px; top:1px; left:4px;"></div>
+                </div>
+            </div>
+            <div class="char-eye" style="width:13px; height:13px; top:8px; right:7px;">
+                <div class="char-pupil" style="width:7px; height:7px; top:4px; left:4px;">
+                    <div class="char-pupil-shine" style="width:3px; height:3px; top:1px; left:4px;"></div>
+                </div>
+            </div>
+            <div class="char-mouth" style="bottom:9px; left:50%; transform:translateX(-50%); width:10px; height:5px;"></div>
+        </div>
+    </div>
+
+    <!-- Title -->
+    <div class="title-area">
+        <div class="title">Crawlr</div>
+        <div class="subtitle">Collect coins, grow your tail, rule the arena!</div>
+        <div class="pills">
+            <div class="pill" style="background:#FFF3E0; color:#E65100; border:2px solid #FFB74D;">&#9889; Sprint</div>
+            <div class="pill" style="background:#E3F2FD; color:#1565C0; border:2px solid #64B5F6;">&#9928;&#65039; Storms</div>
+            <div class="pill" style="background:#FFF8E1; color:#F57F17; border:2px solid #FFD54F;">&#129351; Compete</div>
+        </div>
+    </div>
+
+    <div class="url">crawlr.io</div>
+</div>
+</body>
+</html>

@@ -21,6 +21,7 @@ import { updateLeaderboardStats } from './Leaderboard.js';
 import { updatePowerUpHUD } from './PowerUpHUD.js';
 import { updateRoundHUD } from './RoundHUD.js';
 import { playEffect } from './Sound.js';
+import { updateClouds } from './Clouds.js';
 
 const log = createLogger('GameLoop');
 
@@ -239,6 +240,9 @@ export class GameLoop {
             if (this.themeManager) {
                 this.themeManager.update(this.deltaTime, this.playerMesh?.position);
             }
+
+            // Drift clouds
+            updateClouds(this.deltaTime);
 
             // Move directional light to follow player
             updateLightPosition(this.playerMesh.position);
