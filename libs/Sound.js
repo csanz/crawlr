@@ -93,14 +93,18 @@ function loadSounds() {
     loadSound('electrocutedLightning', '/effects/electrocuted-lightning.mp3');
     loadSound('electrocutedRing', '/effects/electrocuted-ring.mp3');
     loadSound('dashSwish', '/effects/dash-swish.mp3');
+    loadSound('squeel', '/effects/squeel.mp3');
+    loadSound('waterDrink', '/effects/water-drink.mp3');
+    loadSound('gulp', '/effects/gulp.mp3');
+    loadSound('gameover', '/effects/gameover.mp3');
     loadSound('postStormBirds', '/effects/post-storm-birds.mp3');
 
     // Ambiance music — looping background track
     loadSound('ambiance', '/ambiance-default.mp3');
 
     // Register effects
-    registerEffect('fruit:collect', { sound: 'fruitCollect', volume: 0.25, pitchMin: 0.8, pitchMax: 1.0 });
-    registerEffect('waterdrop:collect', { sound: 'fruitCollect', volume: 0.2, pitchMin: 1.1, pitchMax: 1.3 });
+    registerEffect('fruit:collect', { sound: 'gulp', volume: 0.25, pitchMin: 0.95, pitchMax: 1.05 });
+    registerEffect('waterdrop:collect', { sound: 'waterDrink', volume: 0.25, pitchMin: 0.95, pitchMax: 1.05 });
     registerEffect('dash', { sound: 'dashSwish', volume: 0.3, pitchMin: 0.9, pitchMax: 1.1 });
     registerEffect('lightning:strike', { sound: 'lightningStrike', volume: 0.3, pitchMin: 0.85, pitchMax: 1.15 });
     registerEffect('lightning:hit', { sound: 'electrocutedLightning', volume: 0.5, pitchMin: 0.9, pitchMax: 1.1 });

@@ -20,7 +20,7 @@ import { updatePlayerList } from './PlayerList.js';
 import { updateLeaderboardStats } from './Leaderboard.js';
 import { updatePowerUpHUD } from './PowerUpHUD.js';
 import { updateRoundHUD } from './RoundHUD.js';
-import { playEffect } from './Sound.js';
+import { playEffect, playSound } from './Sound.js';
 import { updateClouds } from './Clouds.js';
 
 const log = createLogger('GameLoop');
@@ -77,6 +77,9 @@ export class GameLoop {
             const mesh = this._resolveEntityMesh(data.entityId);
             if (mesh) {
                 this._spawnElectricArcs(mesh);
+            }
+            if (data.entityId === 'player') {
+                setTimeout(() => playSound('squeel', 0.25), 400);
             }
         });
 
@@ -499,6 +502,7 @@ export class GameLoop {
                     this._spawnElectricArcs(this.playerMesh);
                     this._startLightningShake();
                     playEffect('lightning:hit');
+                    setTimeout(() => playSound('squeel', 0.25), 400);
 
                     eventBus.emit('lightning:hit', { entityId: 'player', newSize: newScale });
                 }

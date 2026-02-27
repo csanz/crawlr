@@ -13,14 +13,14 @@ export const GROUND_SIZE_PHYSICS = 100;
 export const GRAVITY = { x: 0.0, y: -9.81, z: 0.0 };
 
 // Player movement settings
-export const PLAYER_SPEED = 3.8;
+export const PLAYER_SPEED = 5.0;
 export const PLAYER_RUN_MULTIPLIER = 1.6;
 export const PLAYER_JUMP_FORCE = 7.0;
 export const FALL_GRAVITY_MULTIPLIER = 3.0;   // Pull-down for landing
 export const LOW_JUMP_MULTIPLIER = 2.0;        // Extra gravity on ascent when jump key released (shorter hops)
 
 // Coin settings
-export const MAX_COINS = 400;
+export const MAX_COINS = 1200;
 export const COIN_RADIUS = 0.3;
 export const COIN_DROP_HEIGHT = 10.0;
 export const COIN_SPAWN_AREA_XZ = GROUND_SIZE_VISUAL * 0.95;

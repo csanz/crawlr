@@ -118,6 +118,25 @@ export function addEyes(mesh) {
 }
 
 /**
+ * Adds a simple smile curve on the front face of a head mesh.
+ * Uses a TubeGeometry along a curve so it renders as a visible 3D line.
+ * @param {THREE.Mesh} mesh
+ */
+function addSmile(mesh) {
+    const points = [];
+    for (let i = 0; i <= 8; i++) {
+        const t = (i / 8) - 0.5; // -0.5 to 0.5
+        points.push(new THREE.Vector3(t * 0.35, -t * t * 0.4, 0));
+    }
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geometry = new THREE.TubeGeometry(curve, 8, 0.03, 4, false);
+    const material = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const smile = new THREE.Mesh(geometry, material);
+    smile.position.set(0, 0.1, 0.52);
+    mesh.add(smile);
+}
+
+/**
  * Creates a rounded box geometry matching the tail segment style.
  * @returns {THREE.BufferGeometry}
  */
@@ -181,8 +200,9 @@ export function createPlayer(scene, world, renderer) {
     playerMesh.userData.glowColor = playerColor;
     glowState.color = playerColor;
 
-    // Add cartoon eyes
+    // Add cartoon eyes + smile
     addEyes(playerMesh);
+    addSmile(playerMesh);
 
     // Physics body
     const playerBody = world.createRigidBody(

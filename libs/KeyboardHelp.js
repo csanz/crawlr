@@ -27,7 +27,7 @@ export function initKeyboardHelp() {
     // Persistent hint in bottom-left
     hint = document.createElement('div');
     hint.textContent = '? for controls';
-    hint.style.cssText = 'position:absolute; bottom:10px; left:10px; z-index:100; color:rgba(255,255,255,0.7); font:13px monospace; pointer-events:none; user-select:none; text-shadow:0 0 4px rgba(0,0,0,0.8);';
+    hint.style.cssText = 'position:absolute; bottom:140px; left:10px; z-index:100; color:rgba(255,255,255,0.7); font:13px monospace; pointer-events:none; user-select:none; text-shadow:0 0 4px rgba(0,0,0,0.8);';
     document.body.appendChild(hint);
 
     // Full overlay (hidden by default)

@@ -21,7 +21,7 @@ import { createBorderMountains } from './libs/BorderMountains.js';
 import { createBoulders } from './libs/Boulders.js';
 import { GRAVITY, BOT_COUNT, COIN_SPAWN_AREA_XZ } from './libs/PhysicsConfig.js';
 import { addNameLabel } from './libs/NameLabels.js';
-import { initSoundSystem, playSnippet } from './libs/Sound.js';
+import { initSoundSystem, playSnippet, playSound } from './libs/Sound.js';
 import { initTailSystem, getPlayerTail } from './libs/Tail.js';
 import { PickupManager, CoinPickup, FruitPickup, WaterDropPickup, RingPickup } from './libs/pickups/index.js';
 import { CollisionHandler } from './libs/CollisionHandler.js';
@@ -42,6 +42,7 @@ import { createClouds, updateClouds } from './libs/Clouds.js';
 import { RoundManager } from './libs/RoundManager.js';
 import { initRoundHUD, hideRoundHUD, showRoundHUD } from './libs/RoundHUD.js';
 import { showPodiumScreen } from './libs/PodiumScreen.js';
+import { initActivityFeed } from './libs/ActivityFeed.js';
 
 const log = createLogger('App');
 
@@ -86,6 +87,7 @@ initKeyboardHelp();
 initPlayerList();
 initPowerUpHUD();
 initRoundHUD();
+initActivityFeed();
 
 // --- Environment ---
 createSkySphere(scene, renderer);
@@ -217,6 +219,7 @@ async function startGame(playerName) {
     eventBus.on('entity:died', (payload) => {
         if (payload.id === 'player') {
             gameLoop.playerFrozen = true;
+            playSound('gameover', 0.3);
             showDeathScreen({
                 killedBy: payload.killedBy,
                 score: coinPickup.coinsCollected,
