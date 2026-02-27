@@ -78,9 +78,8 @@ export class GameLoop {
             if (mesh) {
                 this._spawnElectricArcs(mesh);
             }
-            if (data.entityId === 'player') {
-                setTimeout(() => playSound('squeel', 0.25), 400);
-            }
+            const vol = data.entityId === 'player' ? 0.25 : 0.15;
+            setTimeout(() => playSound('squeel', vol), 400);
         });
 
         // Listen for ring stun freeze/unfreeze
@@ -529,6 +528,7 @@ export class GameLoop {
                     }
 
                     this._spawnElectricArcs(bot.mesh);
+                    setTimeout(() => playSound('squeel', 0.15), 400);
                     eventBus.emit('lightning:hit', { entityId: bot.id, newSize: newScale });
                 }
             }
