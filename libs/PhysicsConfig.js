@@ -13,8 +13,8 @@ export const GROUND_SIZE_PHYSICS = 100;
 export const GRAVITY = { x: 0.0, y: -9.81, z: 0.0 };
 
 // Player movement settings
-export const PLAYER_SPEED = 5.2;
-export const PLAYER_RUN_MULTIPLIER = 1.8;
+export const PLAYER_SPEED = 3.8;
+export const PLAYER_RUN_MULTIPLIER = 1.6;
 export const PLAYER_JUMP_FORCE = 7.0;
 export const FALL_GRAVITY_MULTIPLIER = 3.0;   // Pull-down for landing
 export const LOW_JUMP_MULTIPLIER = 2.0;        // Extra gravity on ascent when jump key released (shorter hops)
@@ -50,7 +50,7 @@ export const SPRINT_BURN_INTERVAL = 1.5;   // seconds before each tail segment i
 
 // Bot settings
 export const BOT_COUNT = 10;
-export const BOT_SPEED_MULTIPLIER = 0.80;
+export const BOT_SPEED_MULTIPLIER = 0.75;
 export const BOT_SPRINT_SPEED_MULTIPLIER = 1.5;
 export const BOT_INITIAL_TAIL_LENGTH = 3;
 export const BOT_VISION_RANGE = 20;

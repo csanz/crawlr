@@ -76,10 +76,6 @@ export function showStartScreen() {
                 border-color: #4CAF50 !important;
                 box-shadow: 0 0 0 3px rgba(76,175,80,0.2) !important;
             }
-            .crawlr-feature-card:hover {
-                transform: translateY(-2px) !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-            }
         `;
         document.head.appendChild(styleEl);
 
@@ -200,36 +196,6 @@ export function showStartScreen() {
             'animation: crawlr-fade-up 0.5s ease-out 0.15s both'
         ].join(';');
         card.appendChild(sub);
-
-        // --- Feature pills ---
-        const features = document.createElement('div');
-        features.style.cssText = [
-            'display:flex', 'justify-content:center', 'gap:8px',
-            'margin-bottom:22px', 'flex-wrap:wrap',
-            'animation: crawlr-fade-up 0.5s ease-out 0.2s both'
-        ].join(';');
-
-        const featureData = [
-            { icon: '\u26a1', label: 'Sprint', color: '#FFF3E0', border: '#FFB74D' },
-            { icon: '\u26c8\ufe0f', label: 'Storms', color: '#E3F2FD', border: '#64B5F6' },
-            { icon: '\ud83e\udd47', label: 'Compete', color: '#FFF8E1', border: '#FFD54F' },
-        ];
-
-        featureData.forEach(f => {
-            const pill = document.createElement('div');
-            pill.className = 'crawlr-feature-card';
-            pill.style.cssText = [
-                `padding:8px 14px`,
-                `border-radius:12px`,
-                `background:${f.color}`,
-                `border:1.5px solid ${f.border}`,
-                'font-size:12px', 'font-weight:600', 'color:#555',
-                'transition: all 0.15s ease', 'cursor:default'
-            ].join(';');
-            pill.textContent = `${f.icon} ${f.label}`;
-            features.appendChild(pill);
-        });
-        card.appendChild(features);
 
         // --- Name input section ---
         const inputSection = document.createElement('div');
