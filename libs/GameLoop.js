@@ -20,10 +20,13 @@ import { updatePlayerList } from './PlayerList.js';
 import { updateLeaderboardStats } from './Leaderboard.js';
 import { updatePowerUpHUD } from './PowerUpHUD.js';
 import { updateRoundHUD } from './RoundHUD.js';
-import { playEffect, playSound } from './Sound.js';
+import { playEffect, playSound, playSpatialEffect, playSpatialSound, setListenerPosition } from './Sound.js';
 import { updateClouds } from './Clouds.js';
 
 const log = createLogger('GameLoop');
+
+// Pre-allocated reusable objects to avoid GC pressure in hot loops
+const _tmpColor = new THREE.Color(0x88bbff);
 
 export class GameLoop {
     /**
@@ -78,8 +81,10 @@ export class GameLoop {
             if (mesh) {
                 this._spawnElectricArcs(mesh);
             }
-            const vol = data.entityId === 'player' ? 0.25 : 0.15;
-            setTimeout(() => playSound('squeel', vol), 400);
+            const baseVol = data.entityId === 'player' ? 0.25 : 0.15;
+            const sx = mesh ? mesh.position.x : 0;
+            const sz = mesh ? mesh.position.z : 0;
+            setTimeout(() => playSpatialSound('squeel', baseVol, sx, sz), 400);
         });
 
         // Listen for ring stun freeze/unfreeze
@@ -187,6 +192,14 @@ export class GameLoop {
             // Update visual positions
             this.updateVisualPositions();
 
+            // Update listener position for spatial audio
+            if (this.playerMesh) {
+                setListenerPosition(this.playerMesh.position.x, this.playerMesh.position.z);
+            }
+
+            // Check head-to-tail overlaps (backup for sensor collisions)
+            this.checkHeadTailOverlaps();
+
             // Check if player/bots fell off the edge
             this.checkBoundaryDeath();
 
@@ -280,11 +293,13 @@ export class GameLoop {
             }
 
             // Emit player move event
+            const _playerEuler = new THREE.Euler();
+            _playerEuler.setFromQuaternion(this.playerMesh.quaternion, 'YXZ');
             eventBus.emit('entity:move', {
                 id: 'player',
                 x: this.playerMesh.position.x,
                 z: this.playerMesh.position.z,
-                angle: 0,
+                angle: _playerEuler.y,
                 sprinting: moveState.run > 0
             });
 
@@ -300,6 +315,76 @@ export class GameLoop {
         }
 
         requestAnimationFrame(this.loop);
+    }
+
+    /**
+     * Distance-based head-vs-tail overlap check.
+     * Backs up Rapier sensor events which can miss intersections.
+     */
+    checkHeadTailOverlaps() {
+        if (!this.deathManager || !this.botManager) return;
+
+        const KILL_DIST_SQ = 1.0; // ~1 unit threshold (head 0.5 + tail 0.4)
+        const playerTail = getPlayerTail();
+
+        // Check each bot head against player tail
+        if (playerTail) {
+            for (const bot of this.botManager.bots) {
+                if (this.deathManager.isInvulnerable(bot.id)) continue;
+                const bx = bot.mesh.position.x;
+                const bz = bot.mesh.position.z;
+                for (let s = 0; s < playerTail.segments.length; s++) {
+                    const seg = playerTail.segments[s];
+                    if (!seg || !seg.mesh) continue;
+                    const dx = bx - seg.mesh.position.x;
+                    const dz = bz - seg.mesh.position.z;
+                    if (dx * dx + dz * dz < KILL_DIST_SQ) {
+                        this.deathManager.killEntity(bot.id, 'player');
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Check player head against each bot tail
+        if (this.playerMesh && !this.deathManager.isInvulnerable('player')) {
+            const px = this.playerMesh.position.x;
+            const pz = this.playerMesh.position.z;
+            for (const bot of this.botManager.bots) {
+                if (!bot.tail) continue;
+                for (let s = 0; s < bot.tail.segments.length; s++) {
+                    const seg = bot.tail.segments[s];
+                    if (!seg || !seg.mesh) continue;
+                    const dx = px - seg.mesh.position.x;
+                    const dz = pz - seg.mesh.position.z;
+                    if (dx * dx + dz * dz < KILL_DIST_SQ) {
+                        this.deathManager.killEntity('player', bot.id);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Check bot heads against other bot tails
+        for (const bot of this.botManager.bots) {
+            if (this.deathManager.isInvulnerable(bot.id)) continue;
+            const bx = bot.mesh.position.x;
+            const bz = bot.mesh.position.z;
+            for (const other of this.botManager.bots) {
+                if (other.id === bot.id) continue;
+                if (!other.tail) continue;
+                for (let s = 0; s < other.tail.segments.length; s++) {
+                    const seg = other.tail.segments[s];
+                    if (!seg || !seg.mesh) continue;
+                    const dx = bx - seg.mesh.position.x;
+                    const dz = bz - seg.mesh.position.z;
+                    if (dx * dx + dz * dz < KILL_DIST_SQ) {
+                        this.deathManager.killEntity(bot.id, other.id);
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     checkBoundaryDeath() {
@@ -439,6 +524,12 @@ export class GameLoop {
 
         if (championId === this.championId && this.crownMesh) return; // no change
 
+        // Announce crown change
+        eventBus.emit('crown:changed', {
+            newChampion: championId,
+            oldChampion: this.championId
+        });
+
         // Create crown if needed
         if (!this.crownMesh) {
             this.crownMesh = this.createCrownMesh();
@@ -500,10 +591,11 @@ export class GameLoop {
                     // Electric arc particles + screen shake + sound
                     this._spawnElectricArcs(this.playerMesh);
                     this._startLightningShake();
-                    playEffect('lightning:hit');
+                    playEffect('lightning:hit'); // player hit — always full volume
                     setTimeout(() => playSound('squeel', 0.25), 400);
 
                     eventBus.emit('lightning:hit', { entityId: 'player', newSize: newScale });
+                    eventBus.emit('entity:sizeChanged', { entityId: 'player', newSize: newScale });
                 }
             }
         }
@@ -528,8 +620,10 @@ export class GameLoop {
                     }
 
                     this._spawnElectricArcs(bot.mesh);
-                    setTimeout(() => playSound('squeel', 0.15), 400);
+                    const bx = bot.mesh.position.x, bz = bot.mesh.position.z;
+                    setTimeout(() => playSpatialSound('squeel', 0.15, bx, bz), 400);
                     eventBus.emit('lightning:hit', { entityId: bot.id, newSize: newScale });
+                    eventBus.emit('entity:sizeChanged', { entityId: bot.id, newSize: newScale });
                 }
             }
         }
@@ -654,7 +748,7 @@ export class GameLoop {
                 const t = (performance.now() - fadeStart) / 500;
                 if (t < 1 && mesh.material) {
                     // Lerp both color and intensity back to original
-                    mesh.material.emissive.copy(origEmissive).lerp(new THREE.Color(0x88bbff), 1 - t);
+                    mesh.material.emissive.copy(origEmissive).lerp(_tmpColor.set(0x88bbff), 1 - t);
                     mesh.material.emissiveIntensity = origIntensity + (1.0 - origIntensity) * (1 - t);
                     mesh.userData._emissiveFadeId = requestAnimationFrame(fadeEmissive);
                 } else if (mesh.material) {

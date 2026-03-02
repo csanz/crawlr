@@ -242,6 +242,10 @@ export class PickupManager {
                 handler.dispose(instance);
             }
             activeMap.clear();
+            // Clear handler-specific tracking state (e.g. ring processedHandles)
+            if (typeof handler.resetState === 'function') {
+                handler.resetState();
+            }
         }
         this.deferredActions = [];
         this.collisionQueue = [];

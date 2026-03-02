@@ -9,7 +9,7 @@ import * as RAPIER from '@dimforge/rapier3d';
 import { BasePickup } from './BasePickup.js';
 import { MAX_RINGS, RING_SPAWN_AREA_XZ, RING_STAMINA_PENALTY } from '../PhysicsConfig.js';
 import { eventBus } from '../EventBus.js';
-import { playEffect } from '../Sound.js';
+import { playEffect, playSpatialEffect } from '../Sound.js';
 
 // Ring color palette
 const RING_COLORS = [0xff4444, 0xff8800, 0xcc44ff, 0xff2266, 0xffaa00];
@@ -111,8 +111,8 @@ export class RingPickup extends BasePickup {
             .setTranslation(position.x, 4.5, position.z);
         const body = this.world.createRigidBody(bodyDesc);
 
-        // Sensor collider
-        const colliderDesc = RAPIER.ColliderDesc.cuboid(3.0, 3.0, 0.35)
+        // Sensor collider — thick enough to catch entities approaching from any angle
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(3.0, 3.0, 1.5)
             .setSensor(true)
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             .setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -127,26 +127,46 @@ export class RingPickup extends BasePickup {
         instance.mesh.position.y = 4.5 + Math.sin(time * 0.8 + instance.mesh.position.x) * 1.2;
         instance.mesh.rotation.y += 0.005;
 
-        // Graceful fade near auto-despawn
         const config = RingPickup.config;
+        const age = (config.despawnAfter && instance.spawnedAt) ? time - instance.spawnedAt : 0;
+        const lifeRatio = config.despawnAfter ? age / config.despawnAfter : 0; // 0→1
+
+        // Breathing scale: gentle pulse that grows more dramatic near end of life.
+        // Last 3s: big expand (up to 1.8x) then rapid shrink — timing window for large players.
+        let breathScale = 1.0;
+        const breathPhase = Math.sin(time * 1.5 + instance.mesh.position.x * 0.5);
+        if (lifeRatio > 0.7) {
+            // Final 30%: dramatic expand/shrink
+            const urgency = (lifeRatio - 0.7) / 0.3; // 0→1
+            breathScale = 1.0 + breathPhase * (0.1 + urgency * 0.7); // up to ±0.8
+        } else {
+            // Normal: subtle breathing
+            breathScale = 1.0 + breathPhase * 0.08;
+        }
+
+        // Graceful fade near auto-despawn
+        let fadeScale = 1.0;
         if (config.despawnAfter && instance.spawnedAt) {
-            const age = time - instance.spawnedAt;
             const fadeStart = config.despawnAfter - DESPAWN_FADE_START;
             if (age > fadeStart) {
                 const t = Math.max(0, 1 - (age - fadeStart) / DESPAWN_FADE_START);
                 this._setRingOpacity(instance.mesh, t);
-                const s = 0.6 + t * 0.4; // shrink from 1.0 to 0.6
-                instance.mesh.scale.setScalar(s);
+                fadeScale = 0.6 + t * 0.4;
             }
         }
 
-        // Sync physics body position for sensor collider
+        instance.mesh.scale.setScalar(breathScale * fadeScale);
+
+        // Sync physics body position AND rotation for sensor collider
         if (instance.body) {
             instance.body.setNextKinematicTranslation({
                 x: instance.mesh.position.x,
                 y: instance.mesh.position.y,
                 z: instance.mesh.position.z
             });
+            // Sync Y rotation so the thin sensor cuboid matches the visual ring orientation
+            const q = new THREE.Quaternion().setFromEuler(instance.mesh.rotation);
+            instance.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
         }
     }
 
@@ -178,9 +198,10 @@ export class RingPickup extends BasePickup {
         // Torus major radius = 3.0, tube = 0.2. Transform entity to ring's local space,
         // measure distance to the ring circle. Only trigger if close to the actual ring body.
         const touchingRing = this._isTouchingTorusBody(entityMesh, instance.mesh);
+        const insideHole = this._isInsideRingHole(entityMesh, instance.mesh);
 
-        if (!touchingRing && isJumping) {
-            // Clean pass through the center — reward path
+        if (!touchingRing && insideHole) {
+            // Head passed through the center — instant reward
             if (handle != null) this.processedHandles.add(handle);
             if (instance.body) {
                 this.world.removeRigidBody(instance.body);
@@ -192,8 +213,8 @@ export class RingPickup extends BasePickup {
                 consumed: false,
                 deferred: {
                     mode: 'passing',
-                    landed: false,
-                    celebrateTimer: 0.2,
+                    landed: true,
+                    celebrateTimer: 0,
                     safetyTimer: 3.0,
                     entityId,
                     tail,
@@ -205,8 +226,20 @@ export class RingPickup extends BasePickup {
         }
 
         if (!touchingRing) {
-            // Not touching ring and not jumping through — ignore
-            return { consumed: false };
+            // Inside the sensor but not yet touching body or inside hole —
+            // track per-frame until the player touches, passes through, or leaves
+            return {
+                consumed: false,
+                deferred: {
+                    mode: 'tracking',
+                    trackTimer: 3.0, // safety timeout
+                    entityId,
+                    tail,
+                    entityMesh,
+                    ring: instance,
+                    handle
+                }
+            };
         }
 
         // --- Hitting the ring body ---
@@ -311,6 +344,79 @@ export class RingPickup extends BasePickup {
             return false;
         }
 
+        // Tracking: entity entered sensor but hasn't touched ring or passed through hole yet.
+        // Check each frame until one of those happens or timeout expires.
+        if (data.mode === 'tracking') {
+            data.trackTimer -= dt;
+            if (data.trackTimer <= 0) {
+                // Timed out — entity left or never committed. Clean up.
+                return true;
+            }
+
+            const { entityId, entityMesh, ring, tail, handle } = data;
+            if (!entityMesh || !ring.mesh) return true;
+
+            const touchingRing = this._isTouchingTorusBody(entityMesh, ring.mesh);
+            const insideHole = this._isInsideRingHole(entityMesh, ring.mesh);
+
+            if (!touchingRing && insideHole) {
+                // Passed through the hole — reward!
+                if (handle != null) this.processedHandles.add(handle);
+                if (ring.body) {
+                    this.world.removeRigidBody(ring.body);
+                    ring.body = null;
+                }
+                this.hitCooldowns.set(entityId, HIT_COOLDOWN);
+
+                data.mode = 'passing';
+                data.landed = true;
+                data.celebrateTimer = 0;
+                data.safetyTimer = 3.0;
+                return false;
+            }
+
+            if (touchingRing) {
+                // Hit the ring body — penalty!
+                if (handle != null) this.processedHandles.add(handle);
+                if (ring.body) {
+                    this.world.removeRigidBody(ring.body);
+                    ring.body = null;
+                }
+                this.hitCooldowns.set(entityId, HIT_COOLDOWN);
+
+                const isJumping = entityMesh.position.y > 1.2;
+
+                if (entityId === 'player') {
+                    eventBus.emit('player:freeze', true);
+                    this._startScreenShake(ring.mesh);
+                    playEffect('ring:hit');
+                }
+                eventBus.emit('ring:shocked', { entityId });
+
+                if (isJumping) {
+                    data.mode = 'airFreeze';
+                    data.freezeTimer = 0.35;
+                    data.landed = false;
+                    data.celebrateTimer = 0.2;
+                    data.safetyTimer = 3.0;
+                } else {
+                    // Spawn hit particles
+                    this._spawnHitEffect(ring.mesh.position.clone(), ring.color);
+                    ring.mesh.traverse(child => {
+                        if (child.material && child.material.emissiveIntensity !== undefined) {
+                            child.material.emissiveIntensity = 0.8;
+                        }
+                    });
+                    data.mode = 'stunned';
+                    data.timer = 0.4;
+                }
+                return false;
+            }
+
+            // Still in the "no man's land" — keep tracking
+            return false;
+        }
+
         if (data.mode === 'passing') {
             data.safetyTimer -= dt;
 
@@ -335,6 +441,7 @@ export class RingPickup extends BasePickup {
             // Success celebration effect
             this._spawnSuccessEffect(ringPos);
             this._spawnShockwave(ringPos, ring.color);
+            if (entityId === 'player') playEffect('ring:jumped');
 
             // Reward tail growth
             if (tail) {
@@ -498,6 +605,25 @@ export class RingPickup extends BasePickup {
         };
     }
 
+    /**
+     * Clean up per-instance state when a ring is disposed (auto-despawn or clearAll).
+     */
+    dispose(instance) {
+        // Clear this handle from processedHandles so Rapier can reuse it
+        if (instance.body) {
+            this.processedHandles.delete(instance.body.handle);
+        }
+        super.dispose(instance);
+    }
+
+    /**
+     * Reset all tracking state (called indirectly via clearAll on round reset).
+     */
+    resetState() {
+        this.processedHandles.clear();
+        this.hitCooldowns.clear();
+    }
+
     // --- Stubs kept for API compatibility (powers removed) ---
     hasPower() { return false; }
     getActivePower() { return null; }
@@ -506,7 +632,7 @@ export class RingPickup extends BasePickup {
     _isTouchingTorusBody(entityMesh, ringGroup) {
         if (!entityMesh || !ringGroup) return true; // fallback: assume touching
         const MAJOR_RADIUS = 3.0;
-        const TOUCH_THRESHOLD = 1.0; // player half-size (0.5) + tube (0.2) + tolerance (0.3)
+        const TOUCH_THRESHOLD = 1.2; // player half-size (0.5) + tube (0.2) + tolerance (0.5)
 
         // Get entity position in ring's local space
         const dx = entityMesh.position.x - ringGroup.position.x;
@@ -519,12 +645,35 @@ export class RingPickup extends BasePickup {
         const lz = dx * Math.sin(angle) + dz * Math.cos(angle);
         const ly = dy;
 
-        // Torus lies in the XY plane (default THREE.TorusGeometry orientation).
-        // Distance from entity to the ring circle (radius 3.0) in the XY plane:
+        // Torus major circle lies in the XY plane (THREE.TorusGeometry default).
+        // Distance from entity to the ring circle (radius 3.0) in XY:
         const distInPlane = Math.sqrt(lx * lx + ly * ly);
-        const distToRing = Math.abs(distInPlane - MAJOR_RADIUS);
+        const distToCircle = Math.abs(distInPlane - MAJOR_RADIUS);
 
-        return distToRing < TOUCH_THRESHOLD;
+        // Full 3D distance to torus surface (lz = depth through the ring hole)
+        const distToTorus = Math.sqrt(distToCircle * distToCircle + lz * lz);
+
+        return distToTorus < TOUCH_THRESHOLD;
+    }
+
+    _isInsideRingHole(entityMesh, ringGroup) {
+        if (!entityMesh || !ringGroup) return false;
+        const MAJOR_RADIUS = 3.0;
+        const HOLE_MARGIN = 0.8; // must be clearly inside the hole, not near the tube
+
+        const dx = entityMesh.position.x - ringGroup.position.x;
+        const dy = entityMesh.position.y - ringGroup.position.y;
+        const dz = entityMesh.position.z - ringGroup.position.z;
+
+        const angle = -ringGroup.rotation.y;
+        const lx = dx * Math.cos(angle) - dz * Math.sin(angle);
+        const ly = dy;
+
+        // Distance from ring center in the ring's XY plane
+        const distFromCenter = Math.sqrt(lx * lx + ly * ly);
+
+        // Must be inside the ring circle (with margin away from tube)
+        return distFromCenter < MAJOR_RADIUS - HOLE_MARGIN;
     }
 
     _setRingOpacity(group, opacity) {

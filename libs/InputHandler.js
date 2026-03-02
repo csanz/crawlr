@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d';
 import { PLAYER_JUMP_FORCE } from './PhysicsConfig.js';
 import { playEffect } from './Sound.js';
+import { eventBus } from './EventBus.js';
 
 /** Current movement state based on key presses */
 export const moveState = {
@@ -70,6 +71,7 @@ export function initInputHandler(playerBody, playerMesh) {
                     const onGround = _playerMesh && _playerMesh.position.y < 1.15 + scaleOffset;
                     if (onGround) {
                         // Ground jump
+                        playEffect('jump');
                         const sizeBonus = _playerMesh ? 1 + (_playerMesh.scale.x - 1) * 0.3 : 1;
                         playerBody.applyImpulse({ x: 0, y: PLAYER_JUMP_FORCE * sizeBonus, z: 0 }, true);
                         moveState.doubleJumped = false;
@@ -100,6 +102,18 @@ export function initInputHandler(playerBody, playerMesh) {
                 moveState.cameraRightTrigger = true;
                 break;
         }
+        // Emit input state on every meaningful keydown
+        if ('wasd shift'.includes(event.key.toLowerCase()) || event.key === ' ') {
+            eventBus.emit('entity:input', {
+                id: 'player',
+                forward: moveState.forward,
+                backward: moveState.backward,
+                left: moveState.left,
+                right: moveState.right,
+                run: moveState.run,
+                jump: moveState.jump
+            });
+        }
     });
 
     window.addEventListener('keyup', (event) => {
@@ -122,6 +136,18 @@ export function initInputHandler(playerBody, playerMesh) {
             case ' ':
                 moveState.jump = 0;
                 break;
+        }
+        // Emit input state on every meaningful keyup
+        if ('wasd shift'.includes(event.key.toLowerCase()) || event.key === ' ') {
+            eventBus.emit('entity:input', {
+                id: 'player',
+                forward: moveState.forward,
+                backward: moveState.backward,
+                left: moveState.left,
+                right: moveState.right,
+                run: moveState.run,
+                jump: moveState.jump
+            });
         }
     });
 } 

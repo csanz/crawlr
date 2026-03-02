@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d';
 import { moveState } from './InputHandler.js';
+import { eventBus } from './EventBus.js';
 import {
     PLAYER_SPEED,
     PLAYER_RUN_MULTIPLIER,
@@ -51,6 +52,38 @@ function getEyePupilGeo() {
 const _eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const _eyePupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
 
+// Shared blink loop — one rAF for all entities instead of one per entity
+const _blinkEntities = [];
+const BLINK_DURATION = 120;
+
+function _blinkLoop() {
+    const now = performance.now();
+    for (let i = _blinkEntities.length - 1; i >= 0; i--) {
+        const mesh = _blinkEntities[i];
+        if (!mesh.parent) { _blinkEntities.splice(i, 1); continue; } // removed from scene
+        const b = mesh.userData.blink;
+        const eyes = mesh.userData.eyes;
+        if (!b || !eyes) continue;
+
+        if (b.blinkStart > 0) {
+            const elapsed = now - b.blinkStart;
+            if (elapsed < BLINK_DURATION) {
+                const t = elapsed / BLINK_DURATION;
+                const squish = t < 0.5 ? 1 - t * 2 : (t - 0.5) * 2;
+                for (const eye of eyes) eye.scale.y = 0.1 + squish * 0.9;
+            } else {
+                for (const eye of eyes) eye.scale.y = 1;
+                b.blinkStart = 0;
+                b.nextBlink = now + 5000 + Math.random() * 8000;
+            }
+        } else if (now >= b.nextBlink) {
+            b.blinkStart = now;
+        }
+    }
+    requestAnimationFrame(_blinkLoop);
+}
+requestAnimationFrame(_blinkLoop);
+
 /**
  * Adds two cartoon eyes on top of a head mesh (player or bot).
  * Positioned on the +Y face (top), looking up, like slither.io.
@@ -79,42 +112,17 @@ export function addEyes(mesh) {
         pupils.push(pupil);
     }
 
-    // Store refs for googly-eye physics + squint
+    // Store refs for googly-eye physics + squint + blink state
     mesh.userData.eyes = eyes;
     mesh.userData.pupils = pupils;
     mesh.userData.eyePhysics = { prevAngle: 0, offsetX: 0, velX: 0, squint: 0, pushZ: 0, painSquint: 0 };
-
-    // Self-running random blink animation
-    let nextBlink = 4000 + Math.random() * 6000; // 4-10s until first blink
-    let blinkStart = 0;
-    const BLINK_DURATION = 120; // ms — how long the eyes stay shut
-
-    const animate = () => {
-        const now = performance.now();
-
-        if (blinkStart > 0) {
-            // Currently blinking
-            const elapsed = now - blinkStart;
-            if (elapsed < BLINK_DURATION) {
-                // Eyes shut — squish Y to nearly flat
-                const t = elapsed / BLINK_DURATION;
-                const squish = t < 0.5 ? 1 - t * 2 : (t - 0.5) * 2; // close then open
-                for (const eye of eyes) eye.scale.y = 0.1 + squish * 0.9;
-            } else {
-                // Blink done — reset and schedule next
-                for (const eye of eyes) eye.scale.y = 1;
-                blinkStart = 0;
-                nextBlink = now + 5000 + Math.random() * 8000; // 5-13s until next
-            }
-        } else if (now >= nextBlink) {
-            blinkStart = now;
-        }
-
-        requestAnimationFrame(animate);
+    mesh.userData.blink = {
+        nextBlink: performance.now() + 4000 + Math.random() * 6000,
+        blinkStart: 0
     };
 
-    // Stagger start so not all snakes blink at the same time
-    setTimeout(() => requestAnimationFrame(animate), Math.random() * 3000);
+    // Register in shared blink loop
+    _blinkEntities.push(mesh);
 }
 
 /**
@@ -311,15 +319,15 @@ export function updatePlayerGlow(playerMesh) {
     const inverseScale = 1 / parentScale;
 
     if (moveState.run) {
-        const pulseIntensity = 0.2 + Math.sin(time * 3) * 0.03;
+        const pulseIntensity = 0.6 + Math.sin(time * 3) * 0.15;
 
-        const targetOpacity = 0.03 * pulseIntensity;
-        playerGlowMesh.material.opacity += (targetOpacity - playerGlowMesh.material.opacity) * 0.08;
+        const targetOpacity = 0.25 * pulseIntensity;
+        playerGlowMesh.material.opacity += (targetOpacity - playerGlowMesh.material.opacity) * 0.12;
 
-        playerGlowMesh.scale.setScalar(inverseScale);
+        playerGlowMesh.scale.setScalar(inverseScale * 1.3);
 
-        const targetIntensity = 0.1 * pulseIntensity;
-        glowLight.intensity += (targetIntensity - glowLight.intensity) * 0.08;
+        const targetIntensity = 0.8 * pulseIntensity;
+        glowLight.intensity += (targetIntensity - glowLight.intensity) * 0.12;
 
         glowState.isGlowing = true;
         glowState.intensity = pulseIntensity;
@@ -359,6 +367,7 @@ export function computeGrowth(currentScale) {
 export function growPlayer(playerMesh) {
     const newScale = computeGrowth(playerMesh.scale.x);
     playerMesh.scale.setScalar(newScale);
+    eventBus.emit('entity:sizeChanged', { entityId: 'player', newSize: newScale });
 }
 
 // Reusable Euler to avoid allocation in hot loop

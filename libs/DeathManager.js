@@ -111,6 +111,7 @@ export class DeathManager {
 
         // Reset player scale
         entity.mesh.scale.setScalar(1.0);
+        eventBus.emit('entity:sizeChanged', { entityId, newSize: 1.0 });
 
         // Brief death flash (turn white)
         entity.mesh.material.color.set(0xffffff);
@@ -215,6 +216,7 @@ export class DeathManager {
 
         // Reset scale
         entity.mesh.scale.setScalar(1.0);
+        eventBus.emit('entity:sizeChanged', { entityId, newSize: 1.0 });
 
         // Restore original color
         entity.mesh.material.color.copy(entity.originalColor);

@@ -4,7 +4,7 @@
  * Fog, lighting, rain, sound, and lightning strikes that reduce entity size.
  */
 import * as THREE from 'three';
-import { playSound, playEffect } from '../Sound.js';
+import { playSound, playSpatialEffect, fadeOutAmbiance, fadeInAmbiance } from '../Sound.js';
 import { eventBus } from '../EventBus.js';
 
 const RAIN_COUNT = 500;
@@ -64,6 +64,7 @@ export const StormTheme = {
     _lightningNextAt: 0,
     _lightningBolts: [],     // active visual bolts
     _flashOverlay: null,
+    _botManager: null,
 
     activate(scene) {
         // Save original state
@@ -116,7 +117,10 @@ export const StormTheme = {
 
         // Storm ambient sound (starts silent, fades in with storm)
         this._stormSound = playSound('storm', 0);
-        this._stormVolume = 0.4; // target max volume
+        this._stormVolume = 0.2; // target max volume
+
+        // Fade out the default ambiance music
+        fadeOutAmbiance(3);
     },
 
     deactivate(scene) {
@@ -154,11 +158,12 @@ export const StormTheme = {
             this._flashOverlay = null;
         }
 
-        // Stop sound
+        // Stop storm sound and restore ambiance
         if (this._stormSound) {
             this._stormSound.stop();
             this._stormSound = null;
         }
+        fadeInAmbiance(3);
     },
 
     update(dt, scene, playerPosition, elapsed, remaining) {
@@ -241,13 +246,23 @@ export const StormTheme = {
     },
 
     _spawnLightning(scene, playerPosition) {
-        // Pick strike position: near player with some randomness
-        const strikeX = (playerPosition ? playerPosition.x : 0) + (Math.random() - 0.5) * 40;
-        const strikeZ = (playerPosition ? playerPosition.z : 0) + (Math.random() - 0.5) * 40;
+        // Pick a random entity to strike near (player or any bot)
+        const targets = [];
+        if (playerPosition) targets.push(playerPosition);
+        if (this._botManager) {
+            for (const bot of this._botManager.bots) {
+                targets.push(bot.mesh.position);
+            }
+        }
+        const target = targets.length > 0
+            ? targets[Math.floor(Math.random() * targets.length)]
+            : { x: 0, z: 0 };
+        const strikeX = target.x + (Math.random() - 0.5) * 20;
+        const strikeZ = target.z + (Math.random() - 0.5) * 20;
         const strikeY = 0.5; // ground level
 
-        // Lightning strike sound effect
-        playEffect('lightning:strike');
+        // Lightning strike sound effect (spatial — quieter if far from player)
+        playSpatialEffect('lightning:strike', strikeX, strikeZ);
 
         // Screen flash
         if (this._flashOverlay) {

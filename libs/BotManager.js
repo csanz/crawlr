@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d';
-import { SnakeTail } from './Tail.js';
+import { SnakeTail, getPlayerTail } from './Tail.js';
 import { eventBus } from './EventBus.js';
 import { addEyes, computeGrowth } from './Player.js';
 import {
@@ -170,7 +170,9 @@ export class BotManager {
         if (!bot) return;
         bot.tail.addSegment(bot.mesh.position.clone());
         // Grow the bot mesh (same tier system as player)
-        bot.mesh.scale.setScalar(computeGrowth(bot.mesh.scale.x));
+        const newScale = computeGrowth(bot.mesh.scale.x);
+        bot.mesh.scale.setScalar(newScale);
+        eventBus.emit('entity:sizeChanged', { entityId: botId, newSize: newScale });
     }
 
     /**
@@ -295,6 +297,31 @@ export class BotManager {
             if (dist < nearestThreatDist) {
                 nearestThreatDist = dist;
                 nearestThreatAngle = Math.atan2(dx, dz);
+            }
+        }
+
+        // Check tail segments as threats (player tail + other bot tails)
+        const playerTail = getPlayerTail();
+        const tailsToCheck = [];
+        if (playerTail && playerTail.entityId !== bot.id) {
+            tailsToCheck.push(playerTail);
+        }
+        for (const other of this.bots) {
+            if (other.id === bot.id) continue;
+            if (other.tail) tailsToCheck.push(other.tail);
+        }
+        for (const tail of tailsToCheck) {
+            // Sample every 2nd segment for performance
+            for (let s = 0; s < tail.segments.length; s += 2) {
+                const seg = tail.segments[s];
+                if (!seg || !seg.mesh) continue;
+                const dx = seg.mesh.position.x - bot.mesh.position.x;
+                const dz = seg.mesh.position.z - bot.mesh.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < nearestThreatDist) {
+                    nearestThreatDist = dist;
+                    nearestThreatAngle = Math.atan2(dx, dz);
+                }
             }
         }
 

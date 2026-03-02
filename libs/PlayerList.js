@@ -16,6 +16,9 @@ const BOT_NAMES = [
 let container = null;
 let rows = [];
 let nameMap = new Map(); // entityId → display name
+let lastHtml = '';
+let lastUpdateTime = 0;
+const UPDATE_INTERVAL = 500; // ms — throttle DOM updates
 
 /**
  * Pick a unique random name for a bot.
@@ -81,6 +84,9 @@ export function getEntityName(entityId) {
  */
 export function updatePlayerList(entities) {
     if (!container) return;
+    const now = performance.now();
+    if (now - lastUpdateTime < UPDATE_INTERVAL) return;
+    lastUpdateTime = now;
 
     // Score = tail length + size bonus, sort descending
     for (const e of entities) {
@@ -124,5 +130,8 @@ export function updatePlayerList(entities) {
         html += `</div>`;
     }
 
-    container.innerHTML = html;
+    if (html !== lastHtml) {
+        container.innerHTML = html;
+        lastHtml = html;
+    }
 }

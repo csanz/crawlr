@@ -4,7 +4,7 @@
  * Shows registered themes with Start/Stop buttons.
  */
 import { eventBus } from './EventBus.js';
-import { playEffect } from './Sound.js';
+import { playSpatialEffect } from './Sound.js';
 
 
 let panel = null;
@@ -120,7 +120,7 @@ function render() {
                 // Simulate lightning striking the player
                 const px = playerMeshRef ? playerMeshRef.position.x : 0;
                 const pz = playerMeshRef ? playerMeshRef.position.z : 0;
-                playEffect('lightning:strike');
+                playSpatialEffect('lightning:strike', px, pz);
                 eventBus.emit('lightning:strike', {
                     x: px,
                     z: pz,

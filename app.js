@@ -184,6 +184,7 @@ async function startGame(playerName) {
 
     // Register player name for player list
     setPlayerName(playerName);
+    eventBus.emit('entity:joined', { entityId: 'player', name: playerName });
 
     // Create bot manager
     const botManager = new BotManager(scene, world, pickupManager, deathManager);
@@ -212,7 +213,8 @@ async function startGame(playerName) {
     // Spawn bots and register their names
     for (let i = 0; i < BOT_COUNT; i++) {
         const bot = botManager.spawnBot();
-        registerBot(bot.id);
+        const botName = registerBot(bot.id);
+        eventBus.emit('entity:joined', { entityId: bot.id, name: botName });
     }
 
     // Listen for player death — freeze input, show death screen, resume on "Play Again"
@@ -239,6 +241,7 @@ async function startGame(playerName) {
     const themeManager = new ThemeManager(scene);
     themeManager.setPlayerMesh(playerMesh);
     themeManager.setPlayerTail(playerTail);
+    StormTheme._botManager = botManager;
     themeManager.registerTheme(StormTheme);
     gameLoop.setThemeManager(themeManager);
 
@@ -274,6 +277,7 @@ async function startGame(playerName) {
         // Reset player
         deathManager.resetEntity('player');
         coinPickup.coinsCollected = 0;
+        eventBus.emit('score:changed', { entityId: 'player', coins: 0 });
 
         // Reset all bots
         for (const bot of botManager.bots) {

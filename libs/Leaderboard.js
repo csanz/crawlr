@@ -71,10 +71,10 @@ function setupEventListeners() {
         }
     });
 
-    // Track coin collection
-    eventBus.on('coin:collected', (payload) => {
+    // Track coin collection via score:changed events
+    eventBus.on('score:changed', (payload) => {
         if (!payload || payload.entityId !== 'player') return;
-        session.coins++;
+        session.coins = payload.coins;
     });
 }
 

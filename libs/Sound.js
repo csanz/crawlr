@@ -16,6 +16,14 @@ const sounds = {};
 /** Whether sound is muted */
 let muted = false;
 
+/** Listener (player) position for spatial audio */
+let listenerX = 0;
+let listenerZ = 0;
+
+/** Spatial audio config */
+const SPATIAL_MAX_DIST = 80;    // beyond this distance, volume = 0
+const SPATIAL_FULL_DIST = 10;   // within this distance, volume = full
+
 /** Ambiance loop state */
 let ambianceSource = null;
 let ambianceGain = null;
@@ -88,6 +96,9 @@ function loadSounds() {
     // Theme sounds
     loadSound('storm', '/themes/theme_storm_ambient.mp3');
 
+    // Ring success sound
+    loadSound('clapRing', '/effects/clap-ring.mp3');
+
     // Effect sounds
     loadSound('lightningStrike', '/effects/lightning-strike.mp3');
     loadSound('electrocutedLightning', '/effects/electrocuted-lightning.mp3');
@@ -96,6 +107,8 @@ function loadSounds() {
     loadSound('squeel', '/effects/squeel.mp3');
     loadSound('waterDrink', '/effects/water-drink.mp3');
     loadSound('gulp', '/effects/gulp.mp3');
+    loadSound('yummy', '/effects/yummy.mp3');
+    loadSound('jump', '/effects/jump.mp3');
     loadSound('gameover', '/effects/gameover.mp3');
     loadSound('postStormBirds', '/effects/post-storm-birds.mp3');
 
@@ -104,11 +117,14 @@ function loadSounds() {
 
     // Register effects
     registerEffect('fruit:collect', { sound: 'gulp', volume: 0.25, pitchMin: 0.95, pitchMax: 1.05 });
+    registerEffect('fruit:yummy', { sound: 'yummy', volume: 0.3, pitchMin: 0.95, pitchMax: 1.05 });
     registerEffect('waterdrop:collect', { sound: 'waterDrink', volume: 0.25, pitchMin: 0.95, pitchMax: 1.05 });
+    registerEffect('jump', { sound: 'jump', volume: 0.15, pitchMin: 0.95, pitchMax: 1.05 });
     registerEffect('dash', { sound: 'dashSwish', volume: 0.3, pitchMin: 0.9, pitchMax: 1.1 });
     registerEffect('lightning:strike', { sound: 'lightningStrike', volume: 0.3, pitchMin: 0.85, pitchMax: 1.15 });
     registerEffect('lightning:hit', { sound: 'electrocutedLightning', volume: 0.5, pitchMin: 0.9, pitchMax: 1.1 });
     registerEffect('ring:hit', { sound: 'electrocutedRing', volume: 0.5, pitchMin: 0.9, pitchMax: 1.1 });
+    registerEffect('ring:jumped', { sound: 'clapRing', volume: 0.5, pitchMin: 0.95, pitchMax: 1.05 });
 }
 
 /**
@@ -282,10 +298,111 @@ export function startAmbiance() {
 }
 
 /**
+ * Fades the ambiance volume to 0 over the given duration (seconds).
+ * @param {number} [duration=2] - Fade duration in seconds
+ */
+export function fadeOutAmbiance(duration = 2) {
+    if (!ambianceGain || !audioContext || muted) return;
+    const now = audioContext.currentTime;
+    ambianceGain.gain.cancelScheduledValues(now);
+    ambianceGain.gain.setValueAtTime(ambianceGain.gain.value, now);
+    ambianceGain.gain.linearRampToValueAtTime(0, now + duration);
+}
+
+/**
+ * Fades the ambiance volume back to normal over the given duration (seconds).
+ * @param {number} [duration=2] - Fade duration in seconds
+ */
+export function fadeInAmbiance(duration = 2) {
+    if (!ambianceGain || !audioContext || muted) return;
+    const now = audioContext.currentTime;
+    ambianceGain.gain.cancelScheduledValues(now);
+    ambianceGain.gain.setValueAtTime(ambianceGain.gain.value, now);
+    ambianceGain.gain.linearRampToValueAtTime(AMBIANCE_VOLUME, now + duration);
+}
+
+/**
+ * Updates the listener (player) position for spatial audio calculations.
+ * Call this once per frame from the game loop.
+ * @param {number} x - Player world X
+ * @param {number} z - Player world Z
+ */
+export function setListenerPosition(x, z) {
+    listenerX = x;
+    listenerZ = z;
+}
+
+/**
+ * Calculates a volume multiplier based on distance from the listener.
+ * Returns 1.0 when within SPATIAL_FULL_DIST, fades to 0 at SPATIAL_MAX_DIST.
+ * @param {number} worldX - Sound source X position
+ * @param {number} worldZ - Sound source Z position
+ * @returns {number} Volume multiplier (0.0–1.0)
+ */
+export function spatialVolume(worldX, worldZ) {
+    const dx = worldX - listenerX;
+    const dz = worldZ - listenerZ;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+
+    if (dist <= SPATIAL_FULL_DIST) return 1.0;
+    if (dist >= SPATIAL_MAX_DIST) return 0.0;
+
+    // Smooth falloff between full and max distance
+    const t = (dist - SPATIAL_FULL_DIST) / (SPATIAL_MAX_DIST - SPATIAL_FULL_DIST);
+    return 1.0 - t * t; // quadratic falloff for natural feel
+}
+
+/**
+ * Plays a sound with spatial attenuation based on distance from the listener.
+ * @param {string} name - Sound key
+ * @param {number} baseVolume - Volume at close range
+ * @param {number} worldX - Sound source X position
+ * @param {number} worldZ - Sound source Z position
+ * @returns {Object|undefined} Sound handle
+ */
+export function playSpatialSound(name, baseVolume, worldX, worldZ) {
+    const sv = spatialVolume(worldX, worldZ);
+    if (sv <= 0) return;
+    return playSound(name, baseVolume * sv);
+}
+
+/**
+ * Plays a registered effect with spatial attenuation.
+ * @param {string} effectName - Effect identifier
+ * @param {number} worldX - Sound source X position
+ * @param {number} worldZ - Sound source Z position
+ * @returns {Object|undefined} Sound handle
+ */
+export function playSpatialEffect(effectName, worldX, worldZ) {
+    const config = effectRegistry[effectName];
+    if (!config) return;
+    const sv = spatialVolume(worldX, worldZ);
+    if (sv <= 0) return;
+    const vol = config.volume * sv;
+    if (config.pitchMin !== 1.0 || config.pitchMax !== 1.0) {
+        return playSoundWithPitch(config.sound, vol, config.pitchMin, config.pitchMax);
+    }
+    return playSound(config.sound, vol);
+}
+
+/**
  * Plays the coin collection sound.
  * @param {number} [volume=1.0] - Playback volume
  * @returns {Object|undefined} Sound handle
  */
 export function playCoinCollect(volume = 1.0) {
     return playSound('coinCollect', volume);
+}
+
+/**
+ * Plays the coin collection sound with spatial attenuation.
+ * @param {number} baseVolume - Volume at close range
+ * @param {number} worldX - Sound source X position
+ * @param {number} worldZ - Sound source Z position
+ * @returns {Object|undefined} Sound handle
+ */
+export function playSpatialCoinCollect(baseVolume, worldX, worldZ) {
+    const sv = spatialVolume(worldX, worldZ);
+    if (sv <= 0) return;
+    return playSound('coinCollect', baseVolume * sv);
 }

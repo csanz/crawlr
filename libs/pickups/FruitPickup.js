@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d';
 import { BasePickup } from './BasePickup.js';
 import { playEffect } from '../Sound.js';
-import { addTailSegment } from '../Tail.js';
+import { addTailSegment, getTailLength } from '../Tail.js';
 import { growPlayer } from '../Player.js';
 import { eventBus } from '../EventBus.js';
 import {
@@ -183,9 +183,11 @@ export class FruitPickup extends BasePickup {
         // 2x coin value
         if (this._coinPickup) {
             this._coinPickup.coinsCollected += 2;
+            eventBus.emit('score:changed', { entityId: 'player', coins: this._coinPickup.coinsCollected });
         }
 
         playEffect('fruit:collect');
+        setTimeout(() => playEffect('fruit:yummy'), 400);
 
         // 2x growth
         if (this.playerMesh) {
@@ -203,7 +205,7 @@ export class FruitPickup extends BasePickup {
             }
         }, 0);
 
-        eventBus.emit('tail:grew', { entityId: 'player', newLength: -1 });
+        eventBus.emit('tail:grew', { entityId: 'player', newLength: getTailLength() });
         return { consumed: true };
     }
 
@@ -214,6 +216,8 @@ export class FruitPickup extends BasePickup {
             for (let i = 0; i < surgeCount; i++) {
                 this.botManager.growBotTail(botId);
             }
+            const bot = this.botManager.bots.find(b => b.id === botId);
+            if (bot) eventBus.emit('tail:grew', { entityId: botId, newLength: bot.tail.getLength() });
         }
         return { consumed: true };
     }
