@@ -639,8 +639,8 @@ export class GameLoop {
                 const dx = this.playerMesh.position.x - x;
                 const dz = this.playerMesh.position.z - z;
                 const dist = Math.sqrt(dx * dx + dz * dz);
-                // Bigger entities have a slightly larger effective hit radius
-                const playerHitRadius = hitRadius * Math.sqrt(this.playerMesh.scale.x);
+                // Slight hit radius increase with size, but capped so large players can still dodge
+                const playerHitRadius = hitRadius * (1 + Math.log2(this.playerMesh.scale.x) * 0.15);
                 if (dist < playerHitRadius) {
                     const newScale = Math.max(minSize, this.playerMesh.scale.x - sizeLoss);
                     this.playerMesh.scale.setScalar(newScale);
@@ -673,7 +673,7 @@ export class GameLoop {
                 const dx = bot.mesh.position.x - x;
                 const dz = bot.mesh.position.z - z;
                 const dist = Math.sqrt(dx * dx + dz * dz);
-                const botHitRadius = hitRadius * Math.sqrt(bot.mesh.scale.x);
+                const botHitRadius = hitRadius * (1 + Math.log2(bot.mesh.scale.x) * 0.15);
                 if (dist < botHitRadius) {
                     const newScale = Math.max(minSize, bot.mesh.scale.x - sizeLoss);
                     bot.mesh.scale.setScalar(newScale);

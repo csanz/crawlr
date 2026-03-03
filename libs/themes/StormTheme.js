@@ -73,6 +73,7 @@ export const StormTheme = {
     _rainVelocities: null,
     _stormSound: null,
     _stormFog: null,
+    _isActive: false,
     _lightningTimer: 0,
     _lightningNextAt: 0,
     _lightningBolts: [],     // active visual bolts
@@ -90,6 +91,7 @@ export const StormTheme = {
     _scene: null,            // stored scene ref for admin/test spawning
 
     activate(scene) {
+        this._isActive = true;
         // Save original state
         this._savedFog = scene.fog;
         this._savedLights = [];
@@ -158,6 +160,7 @@ export const StormTheme = {
     },
 
     deactivate(scene) {
+        this._isActive = false;
         // Restore original fog
         scene.fog = this._savedFog;
         this._savedFog = null;
@@ -386,6 +389,9 @@ export const StormTheme = {
             warnGeo.dispose();
             warnMat.dispose();
 
+            // If storm was deactivated during the warning, bail out
+            if (!this._isActive) return;
+
             // Lightning strike sound
             playSpatialEffect('lightning:strike', strikeX, strikeZ);
 
@@ -418,6 +424,15 @@ export const StormTheme = {
                 age: 0,
                 lifetime: 0.4
             });
+
+            // Safety fallback: remove bolt after 1s even if update loop misses it
+            setTimeout(() => {
+                if (boltMesh.parent) {
+                    scene.remove(boltMesh);
+                    boltGeometry.dispose();
+                    boltMaterial.dispose();
+                }
+            }, 1000);
 
             // Ground impact glow
             const glowGeo = new THREE.CircleGeometry(3, 16);
