@@ -200,6 +200,9 @@ export class GameLoop {
             // Check head-to-tail overlaps (backup for sensor collisions)
             this.checkHeadTailOverlaps();
 
+            // Check head-to-head collisions (bigger eats smaller)
+            this.checkHeadHeadOverlaps();
+
             // Check if player/bots fell off the edge
             this.checkBoundaryDeath();
 
@@ -382,6 +385,66 @@ export class GameLoop {
                         this.deathManager.killEntity(bot.id, other.id);
                         break;
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * Head-to-head collision: bigger entity eats smaller. Near-equal sizes bounce apart.
+     */
+    checkHeadHeadOverlaps() {
+        if (!this.deathManager || !this.botManager) return;
+
+        const HEAD_COLLISION_DIST_SQ = 1.5;
+        const SIZE_TIE_THRESHOLD = 0.2;
+        const BOUNCE_IMPULSE = 8;
+
+        // Build entity list: player + all bots
+        const entities = [];
+        if (this.playerMesh && this.playerBody) {
+            entities.push({
+                id: 'player',
+                mesh: this.playerMesh,
+                body: this.playerBody,
+                size: this.playerMesh.scale.x
+            });
+        }
+        for (const bot of this.botManager.bots) {
+            entities.push({
+                id: bot.id,
+                mesh: bot.mesh,
+                body: bot.body,
+                size: bot.mesh.scale.x
+            });
+        }
+
+        for (let a = 0; a < entities.length; a++) {
+            for (let b = a + 1; b < entities.length; b++) {
+                const ea = entities[a];
+                const eb = entities[b];
+                if (this.deathManager.isInvulnerable(ea.id) || this.deathManager.isInvulnerable(eb.id)) continue;
+
+                // Skip if either entity is airborne (jumping over)
+                const dy = Math.abs(ea.mesh.position.y - eb.mesh.position.y);
+                if (dy > 1.0) continue;
+
+                const dx = ea.mesh.position.x - eb.mesh.position.x;
+                const dz = ea.mesh.position.z - eb.mesh.position.z;
+                if (dx * dx + dz * dz >= HEAD_COLLISION_DIST_SQ) continue;
+
+                const sizeDiff = Math.abs(ea.size - eb.size);
+                if (sizeDiff < SIZE_TIE_THRESHOLD) {
+                    // Near-equal: bounce both apart
+                    const dist = Math.sqrt(dx * dx + dz * dz) || 0.1;
+                    const nx = dx / dist;
+                    const nz = dz / dist;
+                    ea.body.applyImpulse({ x: nx * BOUNCE_IMPULSE, y: 2, z: nz * BOUNCE_IMPULSE }, true);
+                    eb.body.applyImpulse({ x: -nx * BOUNCE_IMPULSE, y: 2, z: -nz * BOUNCE_IMPULSE }, true);
+                } else {
+                    // Bigger eats smaller
+                    const [bigger, smaller] = ea.size > eb.size ? [ea, eb] : [eb, ea];
+                    this.deathManager.killEntity(smaller.id, bigger.id);
                 }
             }
         }

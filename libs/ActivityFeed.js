@@ -19,6 +19,7 @@ const EVENT_CONFIG = {
     'theme:started':     { icon: '\u{1F327}', color: '#66aaff' },
     'theme:ended':       { icon: '\u{1F327}', color: '#66aaff' },
     'crown:changed':     { icon: '\u{1F451}', color: '#ffd700' },
+    'puddle:drown':      { icon: '\u{1F30A}', color: '#2266cc' },
 };
 
 function addItem(icon, text, color, bright) {
@@ -74,6 +75,10 @@ function formatMessage(event, data) {
         case 'crown:changed': {
             const name = getEntityName(data.newChampion);
             return { text: `${name} is the new King!`, bright: isPlayer(data.newChampion) };
+        }
+        case 'puddle:drown': {
+            const name = getEntityName(data.entityId);
+            return { text: `${name} drowned in a puddle`, bright: isPlayer(data.entityId) };
         }
         default:
             return null;

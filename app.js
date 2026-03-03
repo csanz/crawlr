@@ -242,6 +242,7 @@ async function startGame(playerName) {
     themeManager.setPlayerMesh(playerMesh);
     themeManager.setPlayerTail(playerTail);
     StormTheme._botManager = botManager;
+    StormTheme.setDeathManager(deathManager);
     themeManager.registerTheme(StormTheme);
     gameLoop.setThemeManager(themeManager);
 

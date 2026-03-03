@@ -9,7 +9,7 @@ import * as RAPIER from '@dimforge/rapier3d';
 import { BasePickup } from './BasePickup.js';
 import { MAX_RINGS, RING_SPAWN_AREA_XZ, RING_STAMINA_PENALTY } from '../PhysicsConfig.js';
 import { eventBus } from '../EventBus.js';
-import { playEffect, playSpatialEffect } from '../Sound.js';
+import { playEffect, playSpatialEffect, playSnippet } from '../Sound.js';
 
 // Ring color palette
 const RING_COLORS = [0xff4444, 0xff8800, 0xcc44ff, 0xff2266, 0xffaa00];
@@ -53,7 +53,7 @@ export class RingPickup extends BasePickup {
             type: 'ring',
             maxCount: MAX_RINGS,
             spawnAreaXZ: RING_SPAWN_AREA_XZ,
-            spawnHeight: 4.5,
+            spawnHeight: 5.5,
             despawnAfter: 10, // auto-despawn after 10 seconds
             radarColor: null, // per-instance color
             radarShape: 'ring'
@@ -77,7 +77,7 @@ export class RingPickup extends BasePickup {
         const group = new THREE.Group();
 
         // Upright torus
-        const torusGeo = new THREE.TorusGeometry(3.0, 0.2, 16, 32);
+        const torusGeo = new THREE.TorusGeometry(4.0, 0.3, 16, 32);
         const torusMat = new THREE.MeshStandardMaterial({
             color,
             emissive: color,
@@ -90,7 +90,7 @@ export class RingPickup extends BasePickup {
         group.add(torus);
 
         // Glow torus
-        const glowGeo = new THREE.TorusGeometry(3.0, 0.4, 16, 32);
+        const glowGeo = new THREE.TorusGeometry(4.0, 0.6, 16, 32);
         const glowMat = new THREE.MeshBasicMaterial({
             color,
             transparent: true,
@@ -111,8 +111,8 @@ export class RingPickup extends BasePickup {
             .setTranslation(position.x, 4.5, position.z);
         const body = this.world.createRigidBody(bodyDesc);
 
-        // Sensor collider — thick enough to catch entities approaching from any angle
-        const colliderDesc = RAPIER.ColliderDesc.cuboid(3.0, 3.0, 1.5)
+        // Sensor collider — sized to match the larger ring
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(4.0, 4.0, 2.0)
             .setSensor(true)
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             .setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -123,8 +123,8 @@ export class RingPickup extends BasePickup {
     }
 
     updateInstance(instance, time, dt) {
-        // Pronounced bounce + rotation (base 4.5 keeps ring bottom above ground: 4.5 - 1.2 - 3.2 = 0.1)
-        instance.mesh.position.y = 4.5 + Math.sin(time * 0.8 + instance.mesh.position.x) * 1.2;
+        // Pronounced bounce + rotation (base 5.5 keeps ring bottom above ground: 5.5 - 1.2 - 4.0 = 0.3)
+        instance.mesh.position.y = 5.5 + Math.sin(time * 0.8 + instance.mesh.position.x) * 1.2;
         instance.mesh.rotation.y += 0.005;
 
         const config = RingPickup.config;
@@ -201,7 +201,7 @@ export class RingPickup extends BasePickup {
         const insideHole = this._isInsideRingHole(entityMesh, instance.mesh);
 
         if (!touchingRing && insideHole) {
-            // Head passed through the center — instant reward
+            // Head entered the ring hole — track until it crosses through
             if (handle != null) this.processedHandles.add(handle);
             if (instance.body) {
                 this.world.removeRigidBody(instance.body);
@@ -209,12 +209,13 @@ export class RingPickup extends BasePickup {
             }
             this.hitCooldowns.set(entityId, HIT_COOLDOWN);
 
+            const entrySide = this._getEntrySide(entityMesh, instance.mesh);
+
             return {
                 consumed: false,
                 deferred: {
-                    mode: 'passing',
-                    landed: true,
-                    celebrateTimer: 0,
+                    mode: 'crossing',
+                    entrySide,
                     safetyTimer: 3.0,
                     entityId,
                     tail,
@@ -360,7 +361,7 @@ export class RingPickup extends BasePickup {
             const insideHole = this._isInsideRingHole(entityMesh, ring.mesh);
 
             if (!touchingRing && insideHole) {
-                // Passed through the hole — reward!
+                // Entered the hole — track until head crosses through
                 if (handle != null) this.processedHandles.add(handle);
                 if (ring.body) {
                     this.world.removeRigidBody(ring.body);
@@ -368,9 +369,8 @@ export class RingPickup extends BasePickup {
                 }
                 this.hitCooldowns.set(entityId, HIT_COOLDOWN);
 
-                data.mode = 'passing';
-                data.landed = true;
-                data.celebrateTimer = 0;
+                data.mode = 'crossing';
+                data.entrySide = this._getEntrySide(entityMesh, ring.mesh);
                 data.safetyTimer = 3.0;
                 return false;
             }
@@ -417,6 +417,30 @@ export class RingPickup extends BasePickup {
             return false;
         }
 
+        // Crossing: head entered the hole, waiting for it to emerge on the other side
+        if (data.mode === 'crossing') {
+            data.safetyTimer -= dt;
+            const { entityMesh, ring, entrySide } = data;
+
+            if (data.safetyTimer <= 0 || !entityMesh || !ring.mesh) {
+                // Safety timeout or missing refs — celebrate anyway
+                data.mode = 'passing';
+                data.landed = true;
+                data.celebrateTimer = 0;
+                return false;
+            }
+
+            const currentZ = this._getLocalZ(entityMesh, ring.mesh);
+            // Head has crossed to the other side of the ring plane
+            if (currentZ * entrySide < -0.05) {
+                data.mode = 'passing';
+                data.landed = true;
+                data.celebrateTimer = 0;
+            }
+
+            return false;
+        }
+
         if (data.mode === 'passing') {
             data.safetyTimer -= dt;
 
@@ -441,7 +465,10 @@ export class RingPickup extends BasePickup {
             // Success celebration effect
             this._spawnSuccessEffect(ringPos);
             this._spawnShockwave(ringPos, ring.color);
-            if (entityId === 'player') playEffect('ring:jumped');
+            if (entityId === 'player') {
+                playSnippet('clapRing', { volume: 0.15, duration: 1.5, fadeOut: 0.8 });
+                playEffect('ring:woohoo');
+            }
 
             // Reward tail growth
             if (tail) {
@@ -629,10 +656,23 @@ export class RingPickup extends BasePickup {
     getActivePower() { return null; }
     deactivatePower() {}
 
+    _getLocalZ(entityMesh, ringGroup) {
+        if (!entityMesh || !ringGroup) return 0;
+        const dx = entityMesh.position.x - ringGroup.position.x;
+        const dz = entityMesh.position.z - ringGroup.position.z;
+        const angle = -ringGroup.rotation.y;
+        return dx * Math.sin(angle) + dz * Math.cos(angle);
+    }
+
+    _getEntrySide(entityMesh, ringGroup) {
+        const lz = this._getLocalZ(entityMesh, ringGroup);
+        return Math.sign(lz) || 1;
+    }
+
     _isTouchingTorusBody(entityMesh, ringGroup) {
         if (!entityMesh || !ringGroup) return true; // fallback: assume touching
-        const MAJOR_RADIUS = 3.0;
-        const TOUCH_THRESHOLD = 1.2; // player half-size (0.5) + tube (0.2) + tolerance (0.5)
+        const MAJOR_RADIUS = 4.0;
+        const TOUCH_THRESHOLD = 1.8; // player half-size (0.5) + tube (0.3) + generous tolerance (1.0)
 
         // Get entity position in ring's local space
         const dx = entityMesh.position.x - ringGroup.position.x;
@@ -658,8 +698,8 @@ export class RingPickup extends BasePickup {
 
     _isInsideRingHole(entityMesh, ringGroup) {
         if (!entityMesh || !ringGroup) return false;
-        const MAJOR_RADIUS = 3.0;
-        const HOLE_MARGIN = 0.8; // must be clearly inside the hole, not near the tube
+        const MAJOR_RADIUS = 4.0;
+        const HOLE_MARGIN = 1.0; // must be clearly inside the hole, not near the tube
 
         const dx = entityMesh.position.x - ringGroup.position.x;
         const dy = entityMesh.position.y - ringGroup.position.y;

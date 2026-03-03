@@ -96,8 +96,9 @@ function loadSounds() {
     // Theme sounds
     loadSound('storm', '/themes/theme_storm_ambient.mp3');
 
-    // Ring success sound
+    // Ring success sounds
     loadSound('clapRing', '/effects/clap-ring.mp3');
+    loadSound('woohoo', '/effects/woohoo.mp3');
 
     // Effect sounds
     loadSound('lightningStrike', '/effects/lightning-strike.mp3');
@@ -110,6 +111,7 @@ function loadSounds() {
     loadSound('yummy', '/effects/yummy.mp3');
     loadSound('jump', '/effects/jump.mp3');
     loadSound('gameover', '/effects/gameover.mp3');
+    loadSound('drowning', '/effects/drowning.mp3');
     loadSound('postStormBirds', '/effects/post-storm-birds.mp3');
 
     // Ambiance music — looping background track
@@ -124,7 +126,8 @@ function loadSounds() {
     registerEffect('lightning:strike', { sound: 'lightningStrike', volume: 0.3, pitchMin: 0.85, pitchMax: 1.15 });
     registerEffect('lightning:hit', { sound: 'electrocutedLightning', volume: 0.5, pitchMin: 0.9, pitchMax: 1.1 });
     registerEffect('ring:hit', { sound: 'electrocutedRing', volume: 0.5, pitchMin: 0.9, pitchMax: 1.1 });
-    registerEffect('ring:jumped', { sound: 'clapRing', volume: 0.5, pitchMin: 0.95, pitchMax: 1.05 });
+    registerEffect('ring:jumped', { sound: 'clapRing', volume: 0.15, pitchMin: 0.95, pitchMax: 1.05 });
+    registerEffect('ring:woohoo', { sound: 'woohoo', volume: 0.25, pitchMin: 0.95, pitchMax: 1.05 });
 }
 
 /**

@@ -4,7 +4,7 @@
  * Shows registered themes with Start/Stop buttons.
  */
 import { eventBus } from './EventBus.js';
-import { playSpatialEffect } from './Sound.js';
+import { StormTheme } from './themes/StormTheme.js';
 
 
 let panel = null;
@@ -76,10 +76,13 @@ function render() {
         html += `<div style="margin-top:4px;font-size:10px;color:rgba(255,255,255,0.3)">Remaining updates live</div>`;
     }
 
-    // Lightning test section
+    // Storm test section
     html += `<div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:10px;padding-top:8px">`;
-    html += `<div style="color:#fff;font-weight:bold;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:0.6">Effects</div>`;
-    html += `<button data-action="lightning" style="${btnStyle('#c90')}">&#9889; Strike Player</button>`;
+    html += `<div style="color:#fff;font-weight:bold;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:0.6">Storm</div>`;
+    html += `<div style="display:flex;gap:4px;flex-wrap:wrap">`;
+    html += `<button data-action="lightning" style="${btnStyle('#c90')}">&#9889; Lightning</button>`;
+    html += `<button data-action="puddle" style="${btnStyle('#269')}">&#128167; Puddle</button>`;
+    html += `</div>`;
     html += `</div>`;
 
     // Round timer section
@@ -117,18 +120,22 @@ function render() {
             } else if (action === 'stop') {
                 themeManager.forceStop();
             } else if (action === 'lightning') {
-                // Simulate lightning striking the player
+                // Full lightning sequence: warning glow → bolt → damage
                 const px = playerMeshRef ? playerMeshRef.position.x : 0;
                 const pz = playerMeshRef ? playerMeshRef.position.z : 0;
-                playSpatialEffect('lightning:strike', px, pz);
-                eventBus.emit('lightning:strike', {
-                    x: px,
-                    z: pz,
-                    hitRadius: 10,
-                    sizeLoss: 0.15,
-                    minSize: 1.0,
-                    spawnBolt: true
-                });
+                StormTheme.strikeLightningAt(themeManager.scene, px, pz);
+            } else if (action === 'puddle') {
+                // Start storm if not active (puddles need the update loop)
+                if (!themeManager.activeTheme || themeManager.activeTheme.name !== 'Storm') {
+                    themeManager.forceStart('Storm');
+                }
+                // Small delay to let storm activate
+                setTimeout(() => {
+                    const px = playerMeshRef ? playerMeshRef.position.x : 0;
+                    const pz = playerMeshRef ? playerMeshRef.position.z : 0;
+                    StormTheme.spawnPuddleAt(themeManager.scene, px, pz);
+                    render();
+                }, 100);
             } else if (action === 'show-podium') {
                 eventBus.emit('admin:show-podium');
             } else if (action === 'round-duration') {
