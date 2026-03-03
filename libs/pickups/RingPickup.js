@@ -103,12 +103,12 @@ export class RingPickup extends BasePickup {
         group.add(glow);
 
         group.position.copy(position);
-        group.position.y = 4.5;
+        group.position.y = 5.5;
         this.scene.add(group);
 
         // Physics body (kinematic, doesn't fall)
         const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
-            .setTranslation(position.x, 4.5, position.z);
+            .setTranslation(position.x, 5.5, position.z);
         const body = this.world.createRigidBody(bodyDesc);
 
         // Sensor collider — sized to match the larger ring

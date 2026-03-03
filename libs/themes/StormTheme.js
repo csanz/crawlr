@@ -471,24 +471,32 @@ export const StormTheme = {
     _spawnPuddle(scene, playerPosition) {
         // Pick a random entity to spawn directly under
         const targets = [];
-        if (playerPosition) targets.push(playerPosition);
+        if (playerPosition) {
+            const playerMesh = this._deathManager && this._deathManager.entities
+                ? this._deathManager.entities.get('player')?.mesh : null;
+            const size = playerMesh ? playerMesh.scale.x : 1;
+            targets.push({ x: playerPosition.x, z: playerPosition.z, size });
+        }
         if (this._botManager) {
             for (const bot of this._botManager.bots) {
-                targets.push(bot.mesh.position);
+                targets.push({ x: bot.mesh.position.x, z: bot.mesh.position.z, size: bot.mesh.scale.x });
             }
         }
         const target = targets.length > 0
             ? targets[Math.floor(Math.random() * targets.length)]
-            : { x: 0, z: 0 };
-        this._createPuddleMesh(scene, target.x, target.z);
+            : { x: 0, z: 0, size: 1 };
+        // Scale puddle radius by entity size (bigger entity = bigger puddle)
+        const radius = PUDDLE_RADIUS * Math.max(1, target.size);
+        this._createPuddleMesh(scene, target.x, target.z, radius);
     },
 
-    _createPuddleMesh(scene, px, pz) {
+    _createPuddleMesh(scene, px, pz, radius) {
+        radius = radius || PUDDLE_RADIUS;
         // Create puddle group
         const group = new THREE.Group();
 
         // Main puddle circle
-        const circleGeo = new THREE.CircleGeometry(PUDDLE_RADIUS, 32);
+        const circleGeo = new THREE.CircleGeometry(radius, 32);
         const circleMat = new THREE.MeshBasicMaterial({
             color: 0x2266aa,
             transparent: true,
@@ -502,7 +510,7 @@ export const StormTheme = {
         group.add(circle);
 
         // Edge ripple ring
-        const ringGeo = new THREE.RingGeometry(PUDDLE_RADIUS * 0.85, PUDDLE_RADIUS, 32);
+        const ringGeo = new THREE.RingGeometry(radius * 0.85, radius, 32);
         const ringMat = new THREE.MeshBasicMaterial({
             color: 0x44aaff,
             transparent: true,
@@ -525,7 +533,7 @@ export const StormTheme = {
             ringMat,
             x: px,
             z: pz,
-            radius: PUDDLE_RADIUS,
+            radius: radius,
             age: 0,
             maxAge: PUDDLE_MAX_AGE,
             expanding: true
