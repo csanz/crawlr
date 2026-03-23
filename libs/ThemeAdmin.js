@@ -5,6 +5,7 @@
  */
 import { eventBus } from './EventBus.js';
 import { StormTheme } from './themes/StormTheme.js';
+import { toggleAmbientMute, isAmbientMuted, toggleMute, isMuted } from './Sound.js';
 
 
 let panel = null;
@@ -102,6 +103,15 @@ function render() {
         html += `</div>`;
     }
 
+    // Audio section
+    html += `<div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:10px;padding-top:8px">`;
+    html += `<div style="color:#fff;font-weight:bold;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:0.6">Audio</div>`;
+    html += `<div style="display:flex;gap:4px;flex-wrap:wrap">`;
+    html += `<button data-action="toggle-ambient" style="${btnStyle(isAmbientMuted() ? '#555' : '#2a6')}">${isAmbientMuted() ? '&#128263; Ambient Off' : '&#127925; Ambient On'}</button>`;
+    html += `<button data-action="toggle-mute" style="${btnStyle(isMuted() ? '#c33' : '#555')}">${isMuted() ? '&#128263; Unmute All' : '&#128264; Mute All'}</button>`;
+    html += `</div>`;
+    html += `</div>`;
+
     // Test podium button
     html += `<div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:10px;padding-top:8px">`;
     html += `<button data-action="show-podium" style="${btnStyle('#569')}">&#127942; Show Podium</button>`;
@@ -136,6 +146,10 @@ function render() {
                     StormTheme.spawnPuddleAt(themeManager.scene, px, pz);
                     render();
                 }, 100);
+            } else if (action === 'toggle-ambient') {
+                toggleAmbientMute();
+            } else if (action === 'toggle-mute') {
+                toggleMute();
             } else if (action === 'show-podium') {
                 eventBus.emit('admin:show-podium');
             } else if (action === 'round-duration') {

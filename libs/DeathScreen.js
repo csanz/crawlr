@@ -2,20 +2,22 @@
  * @module DeathScreen
  * Shows "You died!" overlay when the player dies.
  * Displays score, killer info, and a "Play Again" button — like slither.io.
+ * In multiplayer: also shows a "Spectate" button.
  */
 
 let overlay = null;
 
 /**
- * Shows the death screen. Returns a promise that resolves when the player clicks "Play Again".
+ * Shows the death screen.
  * @param {object} opts
  * @param {string} opts.killedBy - Who killed the player
  * @param {number} opts.score - Current score (coins collected)
  * @param {number} opts.tailLength - Tail length at death
  * @param {function} opts.getEntityName - Function to resolve entity id to display name
- * @returns {Promise<void>}
+ * @param {boolean} [opts.showSpectate=false] - Show spectate button (multiplayer)
+ * @returns {Promise<string>} Resolves with 'respawn' or 'spectate'
  */
-export function showDeathScreen({ killedBy, score, tailLength, getEntityName }) {
+export function showDeathScreen({ killedBy, score, tailLength, getEntityName, showSpectate = false }) {
     // Remove existing if still showing
     if (overlay) {
         overlay.remove();
@@ -62,6 +64,10 @@ export function showDeathScreen({ killedBy, score, tailLength, getEntityName }) 
 
         box.appendChild(stats);
 
+        // Button row
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:12px; justify-content:center;';
+
         // Play Again button
         const btn = document.createElement('button');
         btn.textContent = 'Play Again';
@@ -73,14 +79,44 @@ export function showDeathScreen({ killedBy, score, tailLength, getEntityName }) 
         ].join(';');
         btn.addEventListener('mouseenter', () => { btn.style.background = '#33ffd9'; });
         btn.addEventListener('mouseleave', () => { btn.style.background = '#00ffcc'; });
-        btn.addEventListener('click', dismiss);
-        box.appendChild(btn);
+        btn.addEventListener('click', () => dismiss('respawn'));
+        btnRow.appendChild(btn);
 
-        // Also dismiss on Enter or Space
+        // Spectate button (multiplayer only)
+        let spectateBtn = null;
+        if (showSpectate) {
+            spectateBtn = document.createElement('button');
+            spectateBtn.textContent = 'Spectate';
+            spectateBtn.style.cssText = [
+                'padding:10px 28px',
+                'font:bold 14px monospace', 'color:#00ffcc',
+                'background:rgba(0,255,204,0.1)', 'border:1px solid rgba(0,255,204,0.3)',
+                'border-radius:8px', 'cursor:pointer', 'letter-spacing:1px'
+            ].join(';');
+            spectateBtn.addEventListener('mouseenter', () => { spectateBtn.style.background = 'rgba(0,255,204,0.2)'; });
+            spectateBtn.addEventListener('mouseleave', () => { spectateBtn.style.background = 'rgba(0,255,204,0.1)'; });
+            spectateBtn.addEventListener('click', () => dismiss('spectate'));
+            btnRow.appendChild(spectateBtn);
+        }
+
+        box.appendChild(btnRow);
+
+        // Keyboard hint
+        if (showSpectate) {
+            const hint = document.createElement('div');
+            hint.style.cssText = 'font-size:10px; color:rgba(255,255,255,0.3); margin-top:12px;';
+            hint.textContent = 'Enter: respawn \u2022 S: spectate';
+            box.appendChild(hint);
+        }
+
+        // Keyboard shortcuts
         const onKey = (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                dismiss();
+                dismiss('respawn');
+            } else if (showSpectate && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                dismiss('spectate');
             }
         };
         window.addEventListener('keydown', onKey);
@@ -88,13 +124,13 @@ export function showDeathScreen({ killedBy, score, tailLength, getEntityName }) 
         overlay.appendChild(box);
         document.body.appendChild(overlay);
 
-        function dismiss() {
+        function dismiss(choice) {
             window.removeEventListener('keydown', onKey);
             if (overlay) {
                 overlay.remove();
                 overlay = null;
             }
-            resolve();
+            resolve(choice);
         }
     });
 }

@@ -69,6 +69,15 @@ export function registerBot(botId) {
 }
 
 /**
+ * Register an entity's display name (for network mode remote players/bots).
+ * @param {string|number} entityId
+ * @param {string} name
+ */
+export function registerEntityName(entityId, name) {
+    if (name) nameMap.set(entityId, name);
+}
+
+/**
  * Get the display name for an entity id.
  * @param {string} entityId
  * @returns {string}
@@ -87,6 +96,13 @@ export function updatePlayerList(entities) {
     const now = performance.now();
     if (now - lastUpdateTime < UPDATE_INTERVAL) return;
     lastUpdateTime = now;
+
+    // Register display names from remote entities (network mode)
+    for (const e of entities) {
+        if (e.displayName && !nameMap.has(e.id)) {
+            nameMap.set(e.id, e.displayName);
+        }
+    }
 
     // Score = tail length + size bonus, sort descending
     for (const e of entities) {

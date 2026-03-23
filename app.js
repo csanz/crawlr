@@ -19,7 +19,8 @@ import { setupRenderer } from './libs/RendererSetup.js';
 import { createGround } from './libs/Ground.js';
 import { createBorderMountains } from './libs/BorderMountains.js';
 import { createBoulders } from './libs/Boulders.js';
-import { GRAVITY, BOT_COUNT, COIN_SPAWN_AREA_XZ } from './libs/PhysicsConfig.js';
+import { GRAVITY, BOT_COUNT, COIN_SPAWN_AREA_XZ, SERVER_URL } from './libs/PhysicsConfig.js';
+import { NetworkManager } from './libs/network/NetworkManager.js';
 import { addNameLabel } from './libs/NameLabels.js';
 import { initSoundSystem, playSnippet, playSound } from './libs/Sound.js';
 import { initTailSystem, getPlayerTail } from './libs/Tail.js';
@@ -32,6 +33,7 @@ import { eventBus } from './libs/EventBus.js';
 import { initPlayerList, setPlayerName, registerBot, getEntityName } from './libs/PlayerList.js';
 import { showStartScreen } from './libs/StartScreen.js';
 import { showDeathScreen } from './libs/DeathScreen.js';
+import { SpectatorMode } from './libs/SpectatorMode.js';
 import { ThemeManager } from './libs/themes/ThemeManager.js';
 import { DefaultTheme } from './libs/themes/DefaultTheme.js';
 import { StormTheme } from './libs/themes/StormTheme.js';
@@ -95,9 +97,30 @@ const directionalLight = setupLighting(scene);
 scene.add(directionalLight.target);
 
 // --- Show start screen, then init game ---
-showStartScreen().then(playerName => {
-    startGame(playerName);
-});
+
+// If multiplayer mode requested without a room, redirect to lobby
+const _urlParams = new URLSearchParams(window.location.search);
+if (_urlParams.get('mode') === 'multiplayer' && !_urlParams.get('room')) {
+    window.location.href = '/lobby.html';
+} else {
+    // If name is provided via URL (from portal), skip the start screen entirely
+    const urlName = _urlParams.get('name');
+    const namePromise = urlName
+        ? Promise.resolve(urlName)
+        : showStartScreen();
+
+    namePromise.then(playerName => {
+        // Persist for future visits
+        localStorage.setItem('crawlr_playerName', playerName);
+
+        const isMultiplayer = _urlParams.get('mode') === 'multiplayer';
+        if (isMultiplayer) {
+            startMultiplayerGame(playerName);
+        } else {
+            startGame(playerName);
+        }
+    });
+}
 
 async function startGame(playerName) {
     // Load map data (falls back to random if unavailable)
@@ -337,5 +360,195 @@ async function startGame(playerName) {
     // Debug: log events to console
     if (typeof window !== 'undefined') {
         window.__eventBus = eventBus;
+    }
+}
+
+/**
+ * Multiplayer mode: connects to the Rust game engine, renders from server snapshots.
+ * No local physics — the server is authoritative.
+ */
+async function startMultiplayerGame(playerName) {
+    log.info('Starting multiplayer mode...');
+
+    // Show connecting overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'connecting-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-family:monospace;';
+    overlay.textContent = 'Connecting to server...';
+    document.body.appendChild(overlay);
+
+    // Connect to server
+    const networkManager = new NetworkManager(SERVER_URL);
+    const room = new URLSearchParams(window.location.search).get('room') || 'default';
+    const connected = await networkManager.connect(playerName, room);
+
+    if (!connected) {
+        const reason = networkManager.lastError || 'Unknown error';
+        overlay.innerHTML = `<div style="text-align:center;max-width:600px;padding:20px;">
+            <div style="font-size:24px;margin-bottom:16px;">Failed to connect</div>
+            <div style="font-size:14px;color:#f88;margin-bottom:16px;">${reason}</div>
+            <div style="font-size:14px;color:#aaa;">Ensure the engine is running (cargo run).<br>Click to play single-player instead.</div>
+        </div>`;
+        overlay.style.cursor = 'pointer';
+        overlay.addEventListener('click', () => {
+            overlay.remove();
+            // Fall back to single-player
+            startGame(playerName);
+        });
+        return;
+    }
+
+    overlay.remove();
+
+    // Load Rapier just for creating a minimal world (we need it for createGround/etc visual setup)
+    // In network mode, physics won't step — just visuals.
+    const RAPIER = await import('@dimforge/rapier3d');
+    const world = new RAPIER.World(GRAVITY);
+    const eventQueue = new RAPIER.EventQueue(true);
+
+    // Initialize sound on first user interaction
+    const startSound = () => { initSoundSystem(); };
+    document.addEventListener('click', startSound, { once: true });
+    document.addEventListener('keydown', startSound, { once: true });
+
+    // Load map for visual environment
+    const mapData = await loadMap('/maps/default.json');
+
+    // Create visual environment (no physics interaction in multiplayer)
+    const groundPlane = createGround(scene, world, renderer);
+    createBorderMountains(scene, world, mapData);
+    createBoulders(scene, world, mapData ? mapData.boulders : null);
+    createClouds(scene);
+    DefaultTheme.apply(scene);
+
+    // Create local player visual mesh (no physics body used)
+    const { playerMesh, playerBody } = createPlayer(scene, world, renderer);
+    playerBody.userData = { type: 'player' };
+    addNameLabel(playerMesh, playerName);
+
+    // Initialize tail system (visual only in multiplayer)
+    initTailSystem(renderer, playerMesh, scene, world);
+
+    initInputHandler(playerBody, playerMesh);
+
+    // Create a dummy block (still needed for visual scene)
+    const { blockMesh, blockBody } = createPushableBlock(scene, world, renderer);
+    blockBody.userData = { type: 'block' };
+
+    // Minimal pickup manager (server manages pickups, client just renders them)
+    const pickupManager = new PickupManager(scene, world);
+    const coinPickup = new CoinPickup(scene, world);
+    pickupManager.register(coinPickup);
+
+    // Minimal collision handler (unused in network mode)
+    const collisionHandler = new CollisionHandler(world, pickupManager);
+
+    // Create death manager (for death events from server)
+    const deathManager = new DeathManager(scene, world, pickupManager);
+    const playerTail = getPlayerTail();
+    deathManager.registerEntity('player', {
+        mesh: playerMesh,
+        body: playerBody,
+        tail: playerTail,
+        isBot: false
+    });
+
+    setPlayerName(playerName);
+    eventBus.emit('entity:joined', { entityId: 'player', name: playerName });
+
+    // Init leaderboard
+    initLeaderboard(() => ({
+        coins: 0,
+        tailLength: playerTail ? playerTail.getLength() : 0,
+        size: playerMesh.scale.x
+    }), playerName);
+
+    // Spectator mode instance
+    const spectatorMode = new SpectatorMode({
+        getEntityName,
+        onRequestRespawn: () => {
+            gameLoop.spectatorTarget = null;
+            gameLoop.playerFrozen = false;
+            networkManager.sendRespawnRequest();
+        },
+    });
+
+    // Listen for death events from server
+    eventBus.on('entity:died', async (payload) => {
+        if (payload.id === 'player') {
+            gameLoop.playerFrozen = true;
+            playSound('gameover', 0.3);
+            const choice = await showDeathScreen({
+                killedBy: payload.killedBy,
+                score: 0,
+                tailLength: payload.tailLength,
+                getEntityName,
+                showSpectate: true,
+            });
+            if (choice === 'spectate') {
+                spectatorMode.start(gameLoop._remotePlayerMeshes);
+                gameLoop.spectatorTarget = spectatorMode;
+            } else {
+                gameLoop.playerFrozen = false;
+                networkManager.sendRespawnRequest();
+            }
+        }
+    });
+
+    // Storm theme needs deathManager and player mesh for puddle drowning
+    StormTheme.setDeathManager(deathManager);
+    StormTheme.setPlayerMesh(playerMesh);
+    StormTheme._networkMode = true;
+
+    // Post-storm effects (bird sounds) — same as single-player path
+    eventBus.on('theme:ended', (payload) => {
+        if (payload.name === 'Storm') {
+            playSnippet('postStormBirds', { volume: 0.25, duration: 6, fadeOut: 2.5 });
+            setTimeout(() => playSnippet('postStormBirds', { volume: 0.18, duration: 5, fadeOut: 2 }), 3000);
+            setTimeout(() => playSnippet('postStormBirds', { volume: 0.15, duration: 4, fadeOut: 2 }), 7000);
+        }
+    });
+
+    // Configure game loop in NETWORK MODE
+    const gameLoop = new GameLoop(scene, world, eventQueue, renderer, camera, controls);
+    gameLoop.setup(playerMesh, playerBody, blockMesh, blockBody, pickupManager, collisionHandler, stats, null, deathManager);
+    gameLoop.setNetworkMode(networkManager);
+
+    // Share remote player meshes with StormTheme for puddle/drowning effects
+    StormTheme.setRemotePlayerMeshes(gameLoop._remotePlayerMeshes);
+
+    // Listen for round end from server
+    eventBus.on('round:end', async (payload) => {
+        gameLoop.playerFrozen = true;
+
+        // Exit spectator mode if active
+        if (spectatorMode.active) {
+            spectatorMode.stop();
+            gameLoop.spectatorTarget = null;
+        }
+
+        // Clear local pickup meshes (server clears them too)
+        if (gameLoop.clearPickupMeshes) gameLoop.clearPickupMeshes();
+
+        hideRoundHUD();
+
+        await showPodiumScreen({
+            rankings: payload.rankings,
+            roundNumber: payload.roundNumber,
+            getEntityName,
+            localPlayerId: networkManager.localPlayerId,
+        });
+
+        showRoundHUD();
+        gameLoop.playerFrozen = false;
+    });
+
+    // Clouds and lighting still update
+    gameLoop.start();
+    log.info('Multiplayer game loop started');
+
+    if (typeof window !== 'undefined') {
+        window.__eventBus = eventBus;
+        window.__networkManager = networkManager;
     }
 }

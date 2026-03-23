@@ -166,6 +166,9 @@ export class SnakeTail {
         // Segments: { mesh, glowMesh, body }
         this.segments = [];
 
+        // Configurable per-instance (overridable for network mode)
+        this.segmentSpacing = TAIL_SEGMENT_SPACING;
+
         // Glow state tracked per-instance
         this.glowState = {
             isGlowing: false,
@@ -197,9 +200,22 @@ export class SnakeTail {
 
     /**
      * Pushes the current position into the ring buffer.
+     * If minDistance > 0, skips the push when too close to the last entry
+     * (prevents tail collapse for lerp-based remote players).
      * @param {THREE.Vector3} position
+     * @param {number} [minDistance=0]
      */
-    updatePositionHistory(position) {
+    updatePositionHistory(position, minDistance = 0) {
+        if (minDistance > 0 && this.historyCount > 0) {
+            const lastOffset = this.historyHead * 3;
+            const dx = position.x - this.positionHistory[lastOffset];
+            const dy = position.y - this.positionHistory[lastOffset + 1];
+            const dz = position.z - this.positionHistory[lastOffset + 2];
+            if (dx * dx + dy * dy + dz * dz < minDistance * minDistance) {
+                return; // too close — don't pollute history
+            }
+        }
+
         this.historyHead = (this.historyHead + 1) % this.maxHistoryLength;
         const offset = this.historyHead * 3;
         this.positionHistory[offset] = position.x;
@@ -280,19 +296,32 @@ export class SnakeTail {
         const time = performance.now() * 0.001;
 
         for (let i = 0; i < this.segments.length; i++) {
-            const historyIndex = i * TAIL_SEGMENT_SPACING;
-            if (historyIndex >= this.historyCount) continue;
-
-            const pos = this.getHistoryPosition(historyIndex);
-            if (!pos) continue;
-
             const seg = this.segments[i];
             const mesh = seg.mesh;
 
+            const historyIndex = i * this.segmentSpacing;
+            let tx, ty, tz;
+
+            if (historyIndex < this.historyCount) {
+                const pos = this.getHistoryPosition(historyIndex);
+                if (pos) {
+                    tx = pos.x; ty = pos.y; tz = pos.z;
+                } else {
+                    continue;
+                }
+            } else if (i > 0) {
+                // Not enough history yet — follow the previous segment
+                // so new tail-end segments trail naturally instead of freezing
+                const prev = this.segments[i - 1].mesh;
+                tx = prev.position.x; ty = prev.position.y; tz = prev.position.z;
+            } else {
+                continue;
+            }
+
             // Lerp toward target
-            mesh.position.x += (pos.x - mesh.position.x) * TAIL_FOLLOW_SPEED;
-            mesh.position.y += (pos.y - mesh.position.y) * TAIL_FOLLOW_SPEED;
-            mesh.position.z += (pos.z - mesh.position.z) * TAIL_FOLLOW_SPEED;
+            mesh.position.x += (tx - mesh.position.x) * TAIL_FOLLOW_SPEED;
+            mesh.position.y += (ty - mesh.position.y) * TAIL_FOLLOW_SPEED;
+            mesh.position.z += (tz - mesh.position.z) * TAIL_FOLLOW_SPEED;
 
             if (applyWiggle) {
                 mesh.position.x += Math.sin(time * 2 + i * 0.5) * TAIL_WIGGLE_AMOUNT;
@@ -307,9 +336,15 @@ export class SnakeTail {
                 mesh.scale.setScalar(newScale);
             }
 
-            // Update kinematic body position
+            // Update kinematic body position and scale collider to match visual
             if (seg.body) {
                 seg.body.setNextKinematicTranslation(mesh.position);
+                // Scale the collider to match visual segment size
+                const collider = seg.body.collider(0);
+                if (collider) {
+                    const halfExtent = mesh.scale.x * 0.4; // base half-extent 0.4 × visual scale
+                    collider.setHalfExtents({ x: halfExtent, y: halfExtent, z: halfExtent });
+                }
             }
         }
 
@@ -379,6 +414,19 @@ export class SnakeTail {
      */
     getLength() {
         return this.segments.length;
+    }
+
+    /**
+     * Updates the tail color for all existing and future segments.
+     * @param {THREE.Color} newColor
+     */
+    setColor(newColor) {
+        this.color = newColor instanceof THREE.Color ? newColor : new THREE.Color(newColor);
+        this.glowState.color = this.color;
+        for (const seg of this.segments) {
+            if (seg.mesh.material) seg.mesh.material.color.copy(this.color);
+            if (seg.glowMesh && seg.glowMesh.material) seg.glowMesh.material.color.copy(this.color);
+        }
     }
 
     /**

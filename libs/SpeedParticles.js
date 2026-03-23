@@ -91,9 +91,10 @@ export class SpeedParticleSystem {
      * Main update — spawns new particles when sprinting and updates existing ones.
      * @param {{ x: number, y: number, z: number }} playerVelocity - Current player velocity
      * @param {number} deltaTime - Seconds since last frame
+     * @param {boolean} [runOverride] - If provided, overrides moveState.run (for remote players)
      */
-    update(playerVelocity, deltaTime) {
-        const isRunning = moveState.run;
+    update(playerVelocity, deltaTime, runOverride) {
+        const isRunning = runOverride !== undefined ? runOverride : moveState.run;
         const shouldEmit = isRunning &&
                         (Math.abs(playerVelocity.x) > 0.1 || Math.abs(playerVelocity.z) > 0.1);
 
@@ -167,7 +168,8 @@ export class SpeedParticleSystem {
             this._systemCounts[i] = 0;
         }
 
-        const aliveParticles = [];
+        // In-place compaction — no array allocation per frame
+        let writeIdx = 0;
 
         for (let i = 0; i < this.particles.length; i++) {
             const p = this.particles[i];
@@ -189,9 +191,11 @@ export class SpeedParticleSystem {
                     this._systemCounts[sysIndex]++;
                 }
 
-                aliveParticles.push(p);
+                if (writeIdx !== i) this.particles[writeIdx] = p;
+                writeIdx++;
             }
         }
+        this.particles.length = writeIdx;
 
         // Update geometry buffers
         for (let i = 0; i < this.particleSystems.length; i++) {
@@ -206,8 +210,6 @@ export class SpeedParticleSystem {
                 this.particleGeometries[i].setDrawRange(0, 0);
             }
         }
-
-        this.particles = aliveParticles;
     }
 
     /**

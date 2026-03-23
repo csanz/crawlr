@@ -4,7 +4,7 @@
  * Fog, lighting, rain, sound, and lightning strikes that reduce entity size.
  */
 import * as THREE from 'three';
-import { playSound, playSpatialSound, playSpatialEffect, fadeOutAmbiance, fadeInAmbiance } from '../Sound.js';
+import { playSound, playSpatialSound, playSpatialEffect, fadeOutAmbiance, fadeInAmbiance, suppressAmbiance, unsuppressAmbiance } from '../Sound.js';
 import { eventBus } from '../EventBus.js';
 
 const RAIN_COUNT = 500;
@@ -22,8 +22,8 @@ const STORM_DIRECTIONAL = 0.3;
 const STORM_RAIN_OPACITY = 0.6;
 
 // Lightning config
-const LIGHTNING_MIN_INTERVAL = 3;   // seconds between strikes
-const LIGHTNING_MAX_INTERVAL = 6;
+const LIGHTNING_MIN_INTERVAL = 1.5;   // seconds between strikes
+const LIGHTNING_MAX_INTERVAL = 3;
 const LIGHTNING_HIT_RADIUS = 8;     // units — entities within this radius lose size
 const LIGHTNING_SIZE_LOSS = 0.15;   // scale reduction per hit
 const LIGHTNING_MIN_SIZE = 1.0;     // can't shrink below starting size
@@ -31,8 +31,8 @@ const LIGHTNING_FLASH_DURATION = 150; // ms
 const LIGHTNING_WARN_DURATION = 1200; // ms — ground warning before bolt drops
 
 // Puddle config
-const PUDDLE_MIN_INTERVAL = 4;     // seconds between spawns
-const PUDDLE_MAX_INTERVAL = 6;
+const PUDDLE_MIN_INTERVAL = 2;     // seconds between spawns
+const PUDDLE_MAX_INTERVAL = 3.5;
 const PUDDLE_RADIUS = 4;           // units
 const PUDDLE_EXPAND_TIME = 0.5;    // seconds — fast pop-up
 const PUDDLE_ACTIVE_TIME = 12;     // seconds — full-size active phase
@@ -45,6 +45,7 @@ const PUDDLE_DROWN_DURATION = 2.3; // seconds — drowning animation (matches so
 export const StormTheme = {
     name: 'Storm',
     duration: 30,
+    _networkMode: false,
     preMessage: { text: 'A storm is coming...', delay: -2 },
     postMessage: { text: 'You survived the storm. The sun is coming out.', delay: 0 },
 
@@ -89,6 +90,16 @@ export const StormTheme = {
     _drowningEntities: null, // Map<entityId, { elapsed, soundHandle, origY }>
     _bubbleParticles: [],    // active bubble particle meshes
     _scene: null,            // stored scene ref for admin/test spawning
+    _playerMesh: null,       // direct ref to player mesh (for network mode)
+    _remotePlayerMeshes: null, // Map<entityId, mesh> — remote players (network mode)
+
+    setPlayerMesh(mesh) {
+        this._playerMesh = mesh;
+    },
+
+    setRemotePlayerMeshes(meshMap) {
+        this._remotePlayerMeshes = meshMap;
+    },
 
     activate(scene) {
         this._isActive = true;
@@ -151,11 +162,14 @@ export const StormTheme = {
         this._bubbleParticles = [];
         this._scene = scene;
 
+        // Suppress ambiance autostart so it doesn't begin mid-storm
+        suppressAmbiance();
+
         // Storm ambient sound (starts silent, fades in with storm)
         this._stormSound = playSound('storm', 0);
         this._stormVolume = 0.2; // target max volume
 
-        // Fade out the default ambiance music
+        // Fade out the default ambiance music (if it already started)
         fadeOutAmbiance(3);
     },
 
@@ -205,11 +219,14 @@ export const StormTheme = {
         }
         this._puddles = [];
 
-        // Stop drowning sounds, unfreeze entities, clean up
+        // Stop drowning sounds, unfreeze entities, clear drowning flags
         if (this._drowningEntities) {
             for (const [entityId, state] of this._drowningEntities) {
                 if (state.soundHandle) state.soundHandle.stop();
                 if (entityId === 'player') eventBus.emit('player:freeze', false);
+                // Clear _puddleDrowning flag so position updates resume
+                const mesh = this._resolveEntityMesh(entityId);
+                if (mesh) mesh.userData._puddleDrowning = false;
             }
             this._drowningEntities = null;
         }
@@ -234,6 +251,7 @@ export const StormTheme = {
             this._stormSound.stop();
             this._stormSound = null;
         }
+        unsuppressAmbiance();
         fadeInAmbiance(3);
     },
 
@@ -285,13 +303,19 @@ export const StormTheme = {
             this._rainMesh.geometry.attributes.position.needsUpdate = true;
         }
 
+        // Retry storm sound if it wasn't loaded when activate() was called
+        if (!this._stormSound) {
+            this._stormSound = playSound('storm', 0);
+        }
+
         // Ramp sound volume with storm intensity
         if (this._stormSound) {
             this._stormSound.setVolume(this._stormVolume * ease);
         }
 
         // Lightning system — only during full intensity (after fade-in, before fade-out)
-        if (ease > 0.8) {
+        // In network mode, server sends lightning strikes and puddles — skip local spawning
+        if (ease > 0.8 && !this._networkMode) {
             this._lightningTimer += dt;
             if (this._lightningTimer >= this._lightningNextAt) {
                 this._lightningTimer = 0;
@@ -560,10 +584,14 @@ export const StormTheme = {
 
         for (let i = this._puddles.length - 1; i >= 0; i--) {
             const puddle = this._puddles[i];
-            puddle.age += dt;
+            // In network mode, server controls puddle age via syncServerPuddles
+            // Only increment age locally for single-player puddles
+            if (puddle.serverId === undefined) {
+                puddle.age += dt;
+            }
 
-            // Remove expired puddles
-            if (puddle.age >= puddle.maxAge) {
+            // Remove expired puddles (single-player only; server puddles removed via sync)
+            if (puddle.serverId === undefined && puddle.age >= puddle.maxAge) {
                 scene.remove(puddle.mesh);
                 puddle.mesh.traverse(child => {
                     if (child.geometry) child.geometry.dispose();
@@ -614,6 +642,14 @@ export const StormTheme = {
         if (this._botManager) {
             for (const bot of this._botManager.bots) {
                 entities.push({ id: bot.id, position: bot.mesh.position, mesh: bot.mesh });
+            }
+        }
+        // Include remote players (network mode)
+        if (this._remotePlayerMeshes) {
+            for (const [entityId, mesh] of this._remotePlayerMeshes) {
+                if (mesh.visible) {
+                    entities.push({ id: entityId, position: mesh.position, mesh });
+                }
             }
         }
         return entities;
@@ -683,9 +719,9 @@ export const StormTheme = {
 
     _resolveEntityMesh(entityId) {
         if (entityId === 'player') {
-            // playerPosition is a Vector3 — need the actual mesh from botManager parent or scene
-            // We look it up via the scene's children (player mesh has userData.type or name label)
-            // Simpler: we can find it through the deathManager's registered entities
+            // Direct mesh ref (set in multiplayer via setPlayerMesh)
+            if (this._playerMesh) return this._playerMesh;
+            // Fallback: look up via DeathManager
             if (this._deathManager && this._deathManager.entities) {
                 const entry = this._deathManager.entities.get('player');
                 if (entry) return entry.mesh;
@@ -695,6 +731,10 @@ export const StormTheme = {
         if (this._botManager) {
             const bot = this._botManager.bots.find(b => b.id === entityId);
             if (bot) return bot.mesh;
+        }
+        // Check remote players (network mode)
+        if (this._remotePlayerMeshes && this._remotePlayerMeshes.has(entityId)) {
+            return this._remotePlayerMeshes.get(entityId);
         }
         return null;
     },
@@ -758,16 +798,20 @@ export const StormTheme = {
         const sz = mesh.position.z;
         const soundHandle = playSpatialSound('drowning', 0.4, sx, sz);
 
-        // Freeze the entity in place
+        // Freeze the entity in place (skip remote players — no physics body)
+        const isRemote = this._remotePlayerMeshes && this._remotePlayerMeshes.has(entityId);
         if (entityId === 'player') {
             eventBus.emit('player:freeze', true);
-        } else if (this._botManager) {
+        } else if (!isRemote && this._botManager) {
             const bot = this._botManager.bots.find(b => b.id === entityId);
             if (bot && bot.body) {
                 bot.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
                 bot.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
             }
         }
+
+        // Mark mesh as drowning so prediction doesn't override position
+        mesh.userData._puddleDrowning = true;
 
         this._drowningEntities.set(entityId, {
             elapsed: 0,
@@ -791,8 +835,9 @@ export const StormTheme = {
                 continue;
             }
 
-            // Keep entity frozen each frame (bot AI tries to move)
-            if (entityId !== 'player' && this._botManager) {
+            // Keep entity frozen each frame (bot AI tries to move, skip remote players)
+            const isRemote = this._remotePlayerMeshes && this._remotePlayerMeshes.has(entityId);
+            if (entityId !== 'player' && !isRemote && this._botManager) {
                 const bot = this._botManager.bots.find(b => b.id === entityId);
                 if (bot && bot.body) {
                     bot.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -820,15 +865,29 @@ export const StormTheme = {
 
             // Drowning complete — kill entity and unfreeze
             if (state.elapsed >= PUDDLE_DROWN_DURATION) {
+                const isRemoteEntity = this._remotePlayerMeshes && this._remotePlayerMeshes.has(entityId);
                 if (entityId === 'player') {
                     eventBus.emit('player:freeze', false);
                 }
-                if (this._deathManager) {
+                if (isRemoteEntity) {
+                    // Remote players: visual-only, server handles actual death
+                    // Just clean up the drowning visual state
+                } else if (this._networkMode && entityId === 'player') {
+                    // In network mode, emit death event directly
+                    // (DeathManager.killEntity does single-player stuff like coin scatter)
+                    eventBus.emit('entity:died', {
+                        id: 'player',
+                        killedBy: 'puddle',
+                        position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+                        tailLength: 0
+                    });
+                } else if (this._deathManager) {
                     this._deathManager.killEntity(entityId, 'puddle');
                 }
                 eventBus.emit('puddle:drown', { entityId });
+                mesh.userData._puddleDrowning = false;
                 this._restoreEntity(entityId);
-                this._puddleOverlaps.set(entityId, 0);
+                if (this._puddleOverlaps) this._puddleOverlaps.set(entityId, 0);
                 this._drowningEntities.delete(entityId);
             }
         }
@@ -885,6 +944,42 @@ export const StormTheme = {
             p.mat.opacity = 0.7 * (1 - t);
             // Bubbles grow slightly as they rise
             p.mesh.scale.setScalar(1 + t * 0.5);
+        }
+    },
+
+    /**
+     * Sync puddles from server snapshot data (network mode only).
+     * Adds new puddles, removes stale ones, and updates age for animation phase.
+     */
+    syncServerPuddles(scene, serverPuddles) {
+        const serverIds = new Set(serverPuddles.map(p => p.id));
+
+        // Remove puddles no longer on server
+        for (let i = this._puddles.length - 1; i >= 0; i--) {
+            if (this._puddles[i].serverId !== undefined && !serverIds.has(this._puddles[i].serverId)) {
+                scene.remove(this._puddles[i].mesh);
+                this._puddles[i].mesh.traverse(c => {
+                    if (c.geometry) c.geometry.dispose();
+                    if (c.material) c.material.dispose();
+                });
+                this._puddles.splice(i, 1);
+            }
+        }
+
+        // Add/update puddles from server
+        const existingIds = new Set(this._puddles.filter(p => p.serverId !== undefined).map(p => p.serverId));
+        for (const sp of serverPuddles) {
+            if (!existingIds.has(sp.id)) {
+                // New puddle — create mesh and set age from server
+                this._createPuddleMesh(scene, sp.x, sp.z, sp.radius);
+                const newPuddle = this._puddles[this._puddles.length - 1];
+                newPuddle.serverId = sp.id;
+                newPuddle.age = sp.age;
+            } else {
+                // Existing — sync age for correct animation phase
+                const existing = this._puddles.find(p => p.serverId === sp.id);
+                if (existing) existing.age = sp.age;
+            }
         }
     },
 

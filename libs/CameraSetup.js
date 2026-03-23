@@ -15,10 +15,10 @@ let targetOrbitAngle = 0;
 let currentOrbitAngle = 0;
 let lastAppliedOrbit = 0; // tracks what was applied last frame to compute delta
 
-/** Auto-follow: subtle camera drift toward movement direction while sprinting */
-const AUTO_FOLLOW_DELAY = 2.0;       // seconds of sustained movement before kicking in
-const AUTO_FOLLOW_STRENGTH = 0.35;   // 0-1: how much to rotate toward movement (subtle bias)
-const AUTO_FOLLOW_LERP = 1.2;        // rotation speed (radians/sec-ish)
+/** Auto-follow: camera drifts toward movement direction (super subtle) */
+const AUTO_FOLLOW_DELAY = 1.5;       // seconds of sustained movement before kicking in
+const AUTO_FOLLOW_STRENGTH = 0.1;    // 0-1: very gentle bias toward movement direction
+const AUTO_FOLLOW_LERP = 0.5;        // rotation speed (radians/sec-ish)
 let moveDirectionTimer = 0;          // how long player has been moving in ~same direction
 let lastMoveAngle = 0;               // last frame's movement angle
 let autoFollowAngle = 0;             // current auto-follow bias
@@ -156,8 +156,8 @@ export function updateAutoFollow(dt, velocity, sprinting) {
         return;
     }
 
-    // Only track when moving at reasonable speed AND sprinting
-    if (speed < 2 || !sprinting) {
+    // Only track when moving at reasonable speed
+    if (speed < 1.5) {
         moveDirectionTimer = 0;
         autoFollowActive = false;
         // Decay auto-follow angle back to 0

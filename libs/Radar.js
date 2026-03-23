@@ -7,6 +7,26 @@ import { GROUND_SIZE_VISUAL } from './PhysicsConfig.js';
 // Cache canvas reference and context - avoid DOM lookup every frame
 let _radarCanvas = null;
 let _radarCtx = null;
+let _expanded = false;
+
+/**
+ * Toggle radar between small (150px) and expanded (400px).
+ * @returns {boolean} New expanded state
+ */
+export function toggleRadarSize() {
+    _expanded = !_expanded;
+    if (!_radarCanvas) {
+        _radarCanvas = document.getElementById('radar');
+        if (!_radarCanvas) return _expanded;
+        _radarCtx = _radarCanvas.getContext('2d');
+    }
+    const size = _expanded ? 400 : 150;
+    _radarCanvas.width = size;
+    _radarCanvas.height = size;
+    _radarCanvas.style.width = size + 'px';
+    _radarCanvas.style.height = size + 'px';
+    return _expanded;
+}
 
 /**
  * Draws the radar showing player position and nearby entities.
@@ -115,6 +135,18 @@ export function drawRadar(currentPlayer, others) {
                 ctx.beginPath();
                 ctx.arc(radarRadius + dx, radarRadius + dz, 3, 0, 2 * Math.PI);
                 ctx.fill();
+                // Pulsing glow ring for friends (human players with F toggled)
+                if (obj.isFriend) {
+                    const pulse = 0.6 + Math.sin(time * 4) * 0.4;
+                    const ringRadius = 6 + Math.sin(time * 3) * 1.5;
+                    ctx.strokeStyle = obj.color || '#00ffcc';
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = pulse;
+                    ctx.beginPath();
+                    ctx.arc(radarRadius + dx, radarRadius + dz, ringRadius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
             }
         }
     }

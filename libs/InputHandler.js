@@ -8,6 +8,15 @@ import { PLAYER_JUMP_FORCE } from './PhysicsConfig.js';
 import { playEffect } from './Sound.js';
 import { eventBus } from './EventBus.js';
 
+/** Queue of jump events for network prediction to consume */
+export const pendingJumps = [];
+
+/** Whether input handler is in network mode (queue jumps instead of applying Rapier impulses) */
+let _networkMode = false;
+
+/** Enable/disable network mode for the input handler */
+export function setInputNetworkMode(v) { _networkMode = v; }
+
 /** Current movement state based on key presses */
 export const moveState = {
     forward: 0,
@@ -20,6 +29,8 @@ export const moveState = {
     zoomTrigger: false,
     angleTrigger: false,
     muteTrigger: false,
+    mapToggleTrigger: false,
+    friendOutlineTrigger: false,
     cameraLeftTrigger: false,
     cameraRightTrigger: false,
     powerSpeedMultiplier: 1.0,
@@ -60,12 +71,34 @@ export function initInputHandler(playerBody, playerMesh) {
                 moveState.angleTrigger = true;
                 break;
             case 'm':
+                moveState.mapToggleTrigger = true;
+                break;
+            case 'n':
                 moveState.muteTrigger = true;
+                break;
+            case 'f':
+                moveState.friendOutlineTrigger = true;
                 break;
             case ' ':
                 if (event.repeat) break; // ignore held key repeats
                 moveState.jump = 1;
-                if (playerBody) {
+                if (_networkMode) {
+                    // Network mode: queue jumps for client-side prediction
+                    const scaleOffset = _playerMesh ? (_playerMesh.scale.x - 1) * 0.5 : 0;
+                    const onGround = _playerMesh && _playerMesh.position.y < 1.15 + scaleOffset;
+                    if (onGround) {
+                        playEffect('jump');
+                        const sizeBonus = _playerMesh ? 1 + (_playerMesh.scale.x - 1) * 0.3 : 1;
+                        pendingJumps.push({ type: 'ground', sizeBonus });
+                        moveState.doubleJumped = false;
+                    } else if (!moveState.doubleJumped) {
+                        moveState.doubleJumped = true;
+                        moveState.flipping = true;
+                        moveState.flipProgress = 0;
+                        playEffect('dash');
+                        pendingJumps.push({ type: 'airDash' });
+                    }
+                } else if (playerBody) {
                     const currentVel = playerBody.linvel();
                     const scaleOffset = _playerMesh ? (_playerMesh.scale.x - 1) * 0.5 : 0;
                     const onGround = _playerMesh && _playerMesh.position.y < 1.15 + scaleOffset;
@@ -116,6 +149,20 @@ export function initInputHandler(playerBody, playerMesh) {
         }
     });
 
+    // Reset all movement when window loses focus (prevents stuck keys)
+    const resetMovement = () => {
+        moveState.forward = 0;
+        moveState.backward = 0;
+        moveState.left = 0;
+        moveState.right = 0;
+        moveState.jump = 0;
+        moveState.sprintHeld = false;
+    };
+    window.addEventListener('blur', resetMovement);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) resetMovement();
+    });
+
     window.addEventListener('keyup', (event) => {
         switch (event.key.toLowerCase()) {
             case 'w':
@@ -150,4 +197,61 @@ export function initInputHandler(playerBody, playerMesh) {
             });
         }
     });
-} 
+}
+
+/**
+ * Compute camera-relative movement direction for network input.
+ * @param {THREE.PerspectiveCamera} camera
+ * @returns {{ dx: number, dz: number, flags: number, angle: number }}
+ */
+export function getNetworkInput(camera) {
+    // Camera forward/right projected onto XZ plane
+    const cameraFwd = new THREE.Vector3();
+    camera.getWorldDirection(cameraFwd);
+    cameraFwd.y = 0;
+    cameraFwd.normalize();
+
+    const cameraRight = new THREE.Vector3();
+    cameraRight.crossVectors(cameraFwd, new THREE.Vector3(0, 1, 0)).normalize();
+
+    // Combine WASD into a direction
+    let dx = 0;
+    let dz = 0;
+
+    if (moveState.forward) {
+        dx += cameraFwd.x;
+        dz += cameraFwd.z;
+    }
+    if (moveState.backward) {
+        dx -= cameraFwd.x;
+        dz -= cameraFwd.z;
+    }
+    if (moveState.left) {
+        dx -= cameraRight.x;
+        dz -= cameraRight.z;
+    }
+    if (moveState.right) {
+        dx += cameraRight.x;
+        dz += cameraRight.z;
+    }
+
+    // Normalize
+    const mag = Math.sqrt(dx * dx + dz * dz);
+    if (mag > 0.01) {
+        dx /= mag;
+        dz /= mag;
+    }
+
+    // Compute facing angle from movement direction
+    let angle = 0;
+    if (mag > 0.01) {
+        angle = Math.atan2(dx, dz);
+    }
+
+    // Flags: bit0 = sprint, bit1 = jump
+    let flags = 0;
+    if (moveState.sprintHeld) flags |= 0x01;
+    if (moveState.jump) flags |= 0x02;
+
+    return { dx, dz, flags, angle };
+}

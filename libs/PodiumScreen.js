@@ -63,9 +63,10 @@ function createSnakeAvatar(color, size) {
  * @param {Array<{id, rank, size, tailLength, score, color}>} opts.rankings - Top 3
  * @param {number} opts.roundNumber - Which round just ended
  * @param {function} opts.getEntityName - Resolves entity id to display name
+ * @param {number} [opts.localPlayerId] - Local player ID for highlighting (multiplayer)
  * @returns {Promise<void>} Resolves when dismissed
  */
-export function showPodiumScreen({ rankings, roundNumber, getEntityName }) {
+export function showPodiumScreen({ rankings, roundNumber, getEntityName, localPlayerId }) {
     if (overlay) {
         overlay.remove();
         overlay = null;
@@ -122,8 +123,8 @@ export function showPodiumScreen({ rankings, roundNumber, getEntityName }) {
 
         for (let i = 0; i < rankings.length; i++) {
             const r = rankings[i];
-            const name = getEntityName ? getEntityName(r.id) : r.id;
-            const isPlayer = r.id === 'player';
+            const name = r.name || (getEntityName ? getEntityName(r.id) : r.id);
+            const isPlayer = r.id === 'player' || (localPlayerId != null && r.id === localPlayerId);
             const medalColor = MEDAL_COLORS[i] || '#888';
 
             const row = document.createElement('div');

@@ -16,13 +16,19 @@ const sounds = {};
 /** Whether sound is muted */
 let muted = false;
 
+/** Whether ambient sound is independently muted */
+let ambientMuted = false;
+
+/** Whether ambiance autostart should be suppressed (e.g. during storm) */
+let ambianceSuppressed = false;
+
 /** Listener (player) position for spatial audio */
 let listenerX = 0;
 let listenerZ = 0;
 
 /** Spatial audio config */
 const SPATIAL_MAX_DIST = 80;    // beyond this distance, volume = 0
-const SPATIAL_FULL_DIST = 10;   // within this distance, volume = full
+const SPATIAL_FULL_DIST = 3;    // within this distance, volume = full
 
 /** Ambiance loop state */
 let ambianceSource = null;
@@ -118,6 +124,7 @@ function loadSounds() {
     loadSound('ambiance', '/ambiance-default.mp3');
 
     // Register effects
+    registerEffect('coinCollect', { sound: 'coinCollect', volume: 0.5, pitchMin: 0.9, pitchMax: 1.1 });
     registerEffect('fruit:collect', { sound: 'gulp', volume: 0.25, pitchMin: 0.95, pitchMax: 1.05 });
     registerEffect('fruit:yummy', { sound: 'yummy', volume: 0.3, pitchMin: 0.95, pitchMax: 1.05 });
     registerEffect('waterdrop:collect', { sound: 'waterDrink', volume: 0.25, pitchMin: 0.95, pitchMax: 1.05 });
@@ -142,8 +149,8 @@ export function loadSound(name, url) {
         .then(audioBuffer => {
             sounds[name] = audioBuffer;
             log.debug(`Loaded sound: ${name}`);
-            // Auto-start ambiance loop once its buffer is decoded
-            if (name === 'ambiance') startAmbiance();
+            // Auto-start ambiance loop once its buffer is decoded (unless suppressed by storm)
+            if (name === 'ambiance' && !ambianceSuppressed) startAmbiance();
         })
         .catch(error => log.error(`Failed to load sound "${name}"`, error));
 }
@@ -155,7 +162,7 @@ export function loadSound(name, url) {
 export function toggleMute() {
     muted = !muted;
     if (ambianceGain) {
-        ambianceGain.gain.value = muted ? 0 : AMBIANCE_VOLUME;
+        ambianceGain.gain.value = (muted || ambientMuted) ? 0 : AMBIANCE_VOLUME;
     }
     return muted;
 }
@@ -165,6 +172,25 @@ export function toggleMute() {
  */
 export function isMuted() {
     return muted;
+}
+
+/**
+ * Toggles ambient/music mute independently of effects.
+ * @returns {boolean} New ambient muted state
+ */
+export function toggleAmbientMute() {
+    ambientMuted = !ambientMuted;
+    if (ambianceGain) {
+        ambianceGain.gain.value = (muted || ambientMuted) ? 0 : AMBIANCE_VOLUME;
+    }
+    return ambientMuted;
+}
+
+/**
+ * @returns {boolean} Whether ambient sound is muted
+ */
+export function isAmbientMuted() {
+    return ambientMuted;
 }
 
 /**
@@ -292,7 +318,7 @@ export function startAmbiance() {
     ambianceSource.loop = true;
 
     ambianceGain = audioContext.createGain();
-    ambianceGain.gain.value = muted ? 0 : AMBIANCE_VOLUME;
+    ambianceGain.gain.value = (muted || ambientMuted) ? 0 : AMBIANCE_VOLUME;
 
     ambianceSource.connect(ambianceGain);
     ambianceGain.connect(audioContext.destination);
@@ -316,8 +342,23 @@ export function fadeOutAmbiance(duration = 2) {
  * Fades the ambiance volume back to normal over the given duration (seconds).
  * @param {number} [duration=2] - Fade duration in seconds
  */
+/**
+ * Suppress ambiance autostart (call before storm activate to prevent race).
+ */
+export function suppressAmbiance() {
+    ambianceSuppressed = true;
+}
+
+/**
+ * Un-suppress and start ambiance if not already playing.
+ */
+export function unsuppressAmbiance() {
+    ambianceSuppressed = false;
+    startAmbiance();
+}
+
 export function fadeInAmbiance(duration = 2) {
-    if (!ambianceGain || !audioContext || muted) return;
+    if (!ambianceGain || !audioContext || muted || ambientMuted) return;
     const now = audioContext.currentTime;
     ambianceGain.gain.cancelScheduledValues(now);
     ambianceGain.gain.setValueAtTime(ambianceGain.gain.value, now);
@@ -350,9 +391,10 @@ export function spatialVolume(worldX, worldZ) {
     if (dist <= SPATIAL_FULL_DIST) return 1.0;
     if (dist >= SPATIAL_MAX_DIST) return 0.0;
 
-    // Smooth falloff between full and max distance
-    const t = (dist - SPATIAL_FULL_DIST) / (SPATIAL_MAX_DIST - SPATIAL_FULL_DIST);
-    return 1.0 - t * t; // quadratic falloff for natural feel
+    // Inverse-distance falloff — drops quickly then tapers
+    // At 10 units: ~0.30, at 20: ~0.15, at 40: ~0.07, at 60: ~0.04
+    const ratio = SPATIAL_FULL_DIST / dist;
+    return ratio * ratio;
 }
 
 /**
