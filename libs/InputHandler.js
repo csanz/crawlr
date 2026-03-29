@@ -17,6 +17,9 @@ let _networkMode = false;
 /** Enable/disable network mode for the input handler */
 export function setInputNetworkMode(v) { _networkMode = v; }
 
+/** Cached player body reference for triggerJump */
+let _playerBody = null;
+
 /** Current movement state based on key presses */
 export const moveState = {
     forward: 0,
@@ -45,8 +48,50 @@ export const moveState = {
  */
 let _playerMesh = null;
 
+/**
+ * Shared jump logic — handles ground jump, air dash, and flip.
+ * Called by both keyboard handler and touch controls.
+ */
+export function triggerJump() {
+    moveState.jump = 1;
+    if (_networkMode) {
+        const scaleOffset = _playerMesh ? (_playerMesh.scale.x - 1) * 0.5 : 0;
+        const onGround = _playerMesh && _playerMesh.position.y < 1.15 + scaleOffset;
+        if (onGround) {
+            playEffect('jump');
+            const sizeBonus = _playerMesh ? 1 + (_playerMesh.scale.x - 1) * 0.3 : 1;
+            pendingJumps.push({ type: 'ground', sizeBonus });
+            moveState.doubleJumped = false;
+        } else if (!moveState.doubleJumped) {
+            moveState.doubleJumped = true;
+            moveState.flipping = true;
+            moveState.flipProgress = 0;
+            playEffect('dash');
+            pendingJumps.push({ type: 'airDash' });
+        }
+    } else if (_playerBody) {
+        const scaleOffset = _playerMesh ? (_playerMesh.scale.x - 1) * 0.5 : 0;
+        const onGround = _playerMesh && _playerMesh.position.y < 1.15 + scaleOffset;
+        if (onGround) {
+            playEffect('jump');
+            const sizeBonus = _playerMesh ? 1 + (_playerMesh.scale.x - 1) * 0.3 : 1;
+            _playerBody.applyImpulse({ x: 0, y: PLAYER_JUMP_FORCE * sizeBonus, z: 0 }, true);
+            moveState.doubleJumped = false;
+        } else if (!moveState.doubleJumped) {
+            moveState.doubleJumped = true;
+            moveState.flipping = true;
+            moveState.flipProgress = 0;
+            playEffect('dash');
+            _playerBody.applyImpulse({ x: 0, y: PLAYER_JUMP_FORCE * 0.3, z: 0 }, true);
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(_playerMesh.quaternion);
+            _playerBody.applyImpulse({ x: forward.x * 8, y: 0, z: forward.z * 8 }, true);
+        }
+    }
+}
+
 export function initInputHandler(playerBody, playerMesh) {
     _playerMesh = playerMesh;
+    _playerBody = playerBody;
     window.addEventListener('keydown', (event) => {
         switch (event.key.toLowerCase()) {
             case 'w':
@@ -81,52 +126,7 @@ export function initInputHandler(playerBody, playerMesh) {
                 break;
             case ' ':
                 if (event.repeat) break; // ignore held key repeats
-                moveState.jump = 1;
-                if (_networkMode) {
-                    // Network mode: queue jumps for client-side prediction
-                    const scaleOffset = _playerMesh ? (_playerMesh.scale.x - 1) * 0.5 : 0;
-                    const onGround = _playerMesh && _playerMesh.position.y < 1.15 + scaleOffset;
-                    if (onGround) {
-                        playEffect('jump');
-                        const sizeBonus = _playerMesh ? 1 + (_playerMesh.scale.x - 1) * 0.3 : 1;
-                        pendingJumps.push({ type: 'ground', sizeBonus });
-                        moveState.doubleJumped = false;
-                    } else if (!moveState.doubleJumped) {
-                        moveState.doubleJumped = true;
-                        moveState.flipping = true;
-                        moveState.flipProgress = 0;
-                        playEffect('dash');
-                        pendingJumps.push({ type: 'airDash' });
-                    }
-                } else if (playerBody) {
-                    const currentVel = playerBody.linvel();
-                    const scaleOffset = _playerMesh ? (_playerMesh.scale.x - 1) * 0.5 : 0;
-                    const onGround = _playerMesh && _playerMesh.position.y < 1.15 + scaleOffset;
-                    if (onGround) {
-                        // Ground jump
-                        playEffect('jump');
-                        const sizeBonus = _playerMesh ? 1 + (_playerMesh.scale.x - 1) * 0.3 : 1;
-                        playerBody.applyImpulse({ x: 0, y: PLAYER_JUMP_FORCE * sizeBonus, z: 0 }, true);
-                        moveState.doubleJumped = false;
-                    } else if (!moveState.doubleJumped) {
-                        // Air dash: forward burst + slight lift + flip
-                        moveState.doubleJumped = true;
-                        moveState.flipping = true;
-                        moveState.flipProgress = 0;
-                        playEffect('dash');
-
-                        // Slight upward boost
-                        playerBody.applyImpulse({ x: 0, y: PLAYER_JUMP_FORCE * 0.3, z: 0 }, true);
-
-                        // Fast forward burst in the direction the player is facing
-                        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(_playerMesh.quaternion);
-                        playerBody.applyImpulse({
-                            x: forward.x * 8,
-                            y: 0,
-                            z: forward.z * 8
-                        }, true);
-                    }
-                }
+                triggerJump();
                 break;
             case 'arrowleft':
                 moveState.cameraLeftTrigger = true;

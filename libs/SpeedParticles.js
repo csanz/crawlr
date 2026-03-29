@@ -213,6 +213,38 @@ export class SpeedParticleSystem {
     }
 
     /**
+     * Spawn particles at a specific position with given velocity (for remote players).
+     */
+    spawnAt(position, velocity) {
+        _spawnDir.set(-velocity.x, 0, -velocity.z).normalize();
+        _spawnPos.copy(position);
+        _spawnPos.x += (Math.random() - 0.5) * 0.8;
+        _spawnPos.y += (Math.random() - 0.3) * 0.6 + 0.4;
+        _spawnPos.z += (Math.random() - 0.5) * 0.8;
+
+        const particleCount = Math.ceil(Math.random() * 2 + 1);
+        const speedRange = PARTICLE_SPEED_RANGE[1] - PARTICLE_SPEED_RANGE[0];
+        const lifeRange = PARTICLE_LIFE_RANGE[1] - PARTICLE_LIFE_RANGE[0];
+
+        for (let i = 0; i < particleCount; i++) {
+            const systemIndex = Math.floor(Math.random() * this.particleSystems.length);
+            const speed = PARTICLE_SPEED_RANGE[0] + Math.random() * speedRange;
+            this.particles.push({
+                px: _spawnPos.x + (Math.random() - 0.5) * 0.2,
+                py: _spawnPos.y + (Math.random() - 0.5) * 0.2,
+                pz: _spawnPos.z + (Math.random() - 0.5) * 0.2,
+                vx: _spawnDir.x * speed + (Math.random() - 0.5) * 0.3,
+                vy: 0.2 + Math.random() * 0.3 + (Math.random() - 0.5) * 0.2,
+                vz: _spawnDir.z * speed + (Math.random() - 0.5) * 0.3,
+                size: PARTICLE_SIZE_RANGE[0] + Math.random() * (PARTICLE_SIZE_RANGE[1] - PARTICLE_SIZE_RANGE[0]),
+                life: PARTICLE_LIFE_RANGE[0] + Math.random() * lifeRange,
+                startTime: performance.now() / 1000,
+                systemIndex,
+            });
+        }
+    }
+
+    /**
      * Removes all particle systems from the scene and disposes GPU resources.
      */
     dispose() {

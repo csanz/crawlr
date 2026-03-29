@@ -217,14 +217,16 @@ export class ThemeManager {
             'left:50%',
             'transform:translateX(-50%)',
             'z-index:8000',
-            'font:bold 22px monospace',
+            'font:bold clamp(14px, 4vw, 22px) monospace',
             'color:#fff',
             'text-align:center',
             'text-shadow:0 2px 12px rgba(0,0,0,0.7)',
             'pointer-events:none',
             'opacity:0',
             'transition:opacity 0.8s ease-in-out',
-            'white-space:nowrap'
+            'max-width:90vw',
+            'padding:0 12px',
+            'box-sizing:border-box'
         ].join(';');
         document.body.appendChild(el);
 

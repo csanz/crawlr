@@ -72,6 +72,15 @@ export function setupOrbitControls(camera, domElement) {
     controls.enableDamping = false;
     controls.minDistance = ZOOM_LEVELS[0].min;
     controls.maxDistance = ZOOM_LEVELS[0].max;
+
+    // Disable OrbitControls touch gestures on touch devices — our TouchControls handles it
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+        controls.touches = { ONE: null, TWO: null };
+        controls.enableRotate = false;
+        controls.enableZoom = false;
+        controls.enablePan = false;
+    }
+
     return controls;
 }
 

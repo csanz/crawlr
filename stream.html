@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crawlr – Event Stream</title>
+    <style>
+        :root {
+            --bg-primary: #212121;
+            --bg-secondary: #171717;
+            --bg-surface: #2a2a2a;
+            --bg-hover: #333;
+            --border: #333;
+            --border-subtle: #2a2a2a;
+            --text-primary: #e4e4e4;
+            --text-secondary: #999;
+            --text-muted: #666;
+            --accent: #7c7cff;
+            --accent-dim: rgba(124, 124, 255, 0.15);
+            --green: #5cb85c;
+            --green-dim: rgba(92, 184, 92, 0.15);
+            --red: #d9534f;
+            --red-dim: rgba(217, 83, 79, 0.15);
+            --yellow: #c4a94d;
+            --yellow-dim: rgba(196, 169, 77, 0.15);
+            --cyan: #5bc0de;
+            --cyan-dim: rgba(91, 192, 222, 0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            width: 220px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand {
+            padding: 16px 16px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-brand svg { width: 18px; height: 18px; fill: var(--accent); }
+
+        .sidebar-brand span {
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: -0.01em;
+        }
+
+        .sidebar-section {
+            padding: 12px 12px 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px 7px 16px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px;
+            margin: 1px 8px;
+            font-size: 13px;
+            transition: background 0.1s, color 0.1s;
+        }
+
+        .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .sidebar-item.active {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border-left: 2px solid var(--accent);
+            padding-left: 14px;
+        }
+
+        .sidebar-item svg { width: 14px; height: 14px; opacity: 0.6; }
+        .sidebar-item.active svg { opacity: 1; }
+
+        .sidebar-stats {
+            margin-top: auto;
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .stat-row .stat-val {
+            font-variant-numeric: tabular-nums;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .stat-row .stat-val.live { color: var(--green); }
+
+        /* ── Main content ── */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 20px;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .topbar h2 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .topbar .badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .badge-offline { background: var(--bg-surface); color: var(--text-muted); }
+        .badge-connecting { background: var(--yellow-dim); color: var(--yellow); }
+        .badge-online { background: var(--green-dim); color: var(--green); }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 20px;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .toolbar input[type="text"] {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: inherit;
+            width: 140px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .toolbar input[type="text"]:focus { border-color: var(--accent); }
+        .toolbar input[type="text"]::placeholder { color: var(--text-muted); }
+
+        .toolbar .label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 500;
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.1s, border-color 0.1s;
+        }
+
+        .btn:hover { background: var(--bg-hover); border-color: #444; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #6b6bf0; }
+
+        .toolbar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+
+        .toolbar .check-label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .toolbar .check-label input { accent-color: var(--accent); }
+
+        /* ── Filter chips ── */
+        .filters {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 20px;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .filters .filter-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-right: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 500;
+        }
+
+        .chip {
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            background: var(--bg-surface);
+            color: var(--text-muted);
+            transition: all 0.12s;
+            font-weight: 500;
+        }
+
+        .chip:hover { background: var(--bg-hover); color: var(--text-secondary); }
+        .chip.active { border-color: var(--border); color: var(--text-primary); }
+        .chip.active[data-type="sound"] { background: var(--green-dim); color: var(--green); border-color: transparent; }
+        .chip.active[data-type="joined"] { background: var(--yellow-dim); color: var(--yellow); border-color: transparent; }
+        .chip.active[data-type="left"] { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
+        .chip.active[data-type="died"] { background: var(--red-dim); color: var(--red); border-color: transparent; }
+        .chip.active[data-type="respawned"] { background: var(--cyan-dim); color: var(--cyan); border-color: transparent; }
+
+        /* ── Event log ── */
+        #log {
+            flex: 1;
+            overflow-y: auto;
+            background: var(--bg-primary);
+            padding: 0;
+        }
+
+        #log::-webkit-scrollbar { width: 6px; }
+        #log::-webkit-scrollbar-track { background: transparent; }
+        #log::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        #log::-webkit-scrollbar-thumb:hover { background: #444; }
+
+        .entry {
+            display: flex;
+            align-items: baseline;
+            gap: 0;
+            padding: 5px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 12px;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        .entry:hover { background: var(--bg-surface); }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .entry .time {
+            color: var(--text-muted);
+            min-width: 85px;
+            font-size: 11px;
+        }
+
+        .entry .type {
+            min-width: 100px;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .entry .detail {
+            color: var(--text-secondary);
+            flex: 1;
+        }
+
+        .type-sound { color: var(--green); }
+        .type-joined { color: var(--yellow); }
+        .type-left { color: var(--text-muted); }
+        .type-died { color: var(--red); }
+        .type-respawned { color: var(--cyan); }
+
+        /* ── Empty state ── */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            gap: 8px;
+        }
+
+        .empty-state .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .empty-state p { font-size: 13px; }
+
+        /* ── Sidebar toggle (mobile) ── */
+        .sidebar-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .sidebar-toggle svg { width: 20px; height: 20px; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                z-index: 100;
+                transform: translateX(-100%);
+                transition: transform 0.2s ease;
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
+            }
+
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 99;
+            }
+
+            .sidebar-overlay.open { display: block; }
+
+            .sidebar-toggle { display: block; }
+
+            .toolbar {
+                flex-wrap: wrap;
+                padding: 8px 12px;
+                gap: 6px;
+            }
+
+            .toolbar input[type="text"] {
+                width: 80px;
+                min-width: 0;
+                flex: 1;
+            }
+
+            .toolbar .sep { display: none; }
+
+            .filters {
+                flex-wrap: wrap;
+                padding: 6px 12px;
+                gap: 4px;
+            }
+
+            .topbar { padding: 10px 12px; }
+
+            .entry {
+                padding: 5px 12px;
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+
+            .entry .time { min-width: auto; }
+            .entry .type { min-width: auto; }
+            .entry .detail {
+                flex-basis: 100%;
+                padding-left: 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .toolbar .label { display: none; }
+
+            .entry { font-size: 11px; }
+            .entry .time { font-size: 10px; }
+            .entry .type { font-size: 10px; }
+
+            .chip { font-size: 10px; padding: 3px 8px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-brand">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12l3 3 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            <span>crawlr</span>
+        </div>
+
+        <div class="sidebar-section">Live</div>
+        <div class="sidebar-item active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Event Stream
+        </div>
+
+        <div class="sidebar-section">Views</div>
+        <div class="sidebar-item" onclick="window.location='/?mode=multiplayer'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Game Client
+        </div>
+        <div class="sidebar-item" onclick="window.location='/'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            Single Player
+        </div>
+
+        <div class="sidebar-stats">
+            <div class="stat-row"><span>Events</span><span class="stat-val" id="totalCount">0</span></div>
+            <div class="stat-row"><span>Sounds</span><span class="stat-val" id="soundCount">0</span></div>
+            <div class="stat-row"><span>Deaths</span><span class="stat-val" id="deathCount">0</span></div>
+            <div class="stat-row"><span>Snapshots</span><span class="stat-val live" id="snapCount">0</span></div>
+        </div>
+    </div>
+
+    <!-- Sidebar overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main content -->
+    <div class="main">
+        <div class="topbar">
+            <button class="sidebar-toggle" id="sidebarToggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <h2>Event Stream</h2>
+            <div id="statusEl" class="badge badge-offline">Offline</div>
+        </div>
+
+        <div class="toolbar">
+            <span class="label">Name</span>
+            <input type="text" id="nameInput" value="StreamViewer" placeholder="Display name..." />
+            <span class="label">Room</span>
+            <input type="text" id="roomInput" value="default" placeholder="Room ID..." />
+            <button class="btn btn-primary" id="connectBtn">Connect</button>
+            <div class="sep"></div>
+            <button class="btn" id="clearBtn">Clear</button>
+            <label class="check-label"><input type="checkbox" id="autoScroll" checked /> Auto-scroll</label>
+        </div>
+
+        <div class="filters">
+            <span class="filter-label">Filter</span>
+            <div class="chip active" data-type="sound">Sound</div>
+            <div class="chip active" data-type="joined">Joined</div>
+            <div class="chip active" data-type="left">Left</div>
+            <div class="chip active" data-type="died">Died</div>
+            <div class="chip active" data-type="respawned">Respawned</div>
+        </div>
+
+        <div id="log">
+            <div class="empty-state" id="emptyState">
+                <div class="spinner"></div>
+                <p>Connecting to server...</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { NetworkClient } from './libs/network/NetworkClient.js';
+        import { EVENT_SOUND, EVENT_PLAYER_JOINED, EVENT_PLAYER_LEFT, EVENT_PLAYER_DIED, EVENT_PLAYER_RESPAWNED } from './libs/network/Protocol.js';
+
+        const logEl = document.getElementById('log');
+        const statusEl = document.getElementById('statusEl');
+        const emptyState = document.getElementById('emptyState');
+        const totalEl = document.getElementById('totalCount');
+        const soundEl = document.getElementById('soundCount');
+        const deathEl = document.getElementById('deathCount');
+        const snapEl = document.getElementById('snapCount');
+        const autoScrollCb = document.getElementById('autoScroll');
+
+        let counts = { total: 0, sound: 0, death: 0, snap: 0 };
+        let activeFilters = new Set(['sound', 'joined', 'left', 'died', 'respawned']);
+        const MAX_ENTRIES = 500;
+        let hasEntries = false;
+
+        // Filter chips
+        document.querySelectorAll('.filters .chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const t = chip.dataset.type;
+                if (activeFilters.has(t)) { activeFilters.delete(t); chip.classList.remove('active'); }
+                else { activeFilters.add(t); chip.classList.add('active'); }
+            });
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            // Remove only entry rows, keep empty state
+            logEl.querySelectorAll('.entry').forEach(e => e.remove());
+            counts = { total: 0, sound: 0, death: 0, snap: 0 };
+            hasEntries = false;
+            updateStats();
+        });
+
+        function updateStats() {
+            totalEl.textContent = counts.total;
+            soundEl.textContent = counts.sound;
+            deathEl.textContent = counts.death;
+            snapEl.textContent = counts.snap;
+        }
+
+        function addEntry(type, detail) {
+            if (!activeFilters.has(type)) return;
+
+            // Hide empty state on first entry
+            if (!hasEntries) {
+                hasEntries = true;
+                if (emptyState) emptyState.style.display = 'none';
+            }
+
+            counts.total++;
+            if (type === 'sound') counts.sound++;
+            if (type === 'died') counts.death++;
+            updateStats();
+
+            const row = document.createElement('div');
+            row.className = 'entry';
+            const now = new Date();
+            const ts = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+            row.innerHTML = `<span class="time">${ts}</span><span class="type type-${type}">${type.toUpperCase()}</span><span class="detail">${detail}</span>`;
+            logEl.appendChild(row);
+
+            while (logEl.querySelectorAll('.entry').length > MAX_ENTRIES) {
+                const first = logEl.querySelector('.entry');
+                if (first) first.remove();
+            }
+
+            if (autoScrollCb.checked) {
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+        }
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            const name = document.getElementById('nameInput').value || 'StreamViewer';
+            const room = document.getElementById('roomInput').value || 'default';
+
+            statusEl.textContent = 'Connecting';
+            statusEl.className = 'badge badge-connecting';
+
+            try {
+                const client = new NetworkClient();
+                await client.connect('https://localhost:4433');
+                const response = await client.sendJoinRequest(name, room);
+
+                if (response.status !== 0) {
+                    statusEl.textContent = 'Rejected';
+                    statusEl.className = 'badge badge-offline';
+                    return;
+                }
+
+                const playerId = response.playerId;
+                statusEl.textContent = `Player ${playerId} / ${room}`;
+                statusEl.className = 'badge badge-online';
+
+                addEntry('joined', `Connected as player ${playerId}`);
+
+                client.onEvent((event) => {
+                    switch (event.eventType) {
+                        case EVENT_SOUND: {
+                            if (!event.payload || event.payload.byteLength < 1) break;
+                            const pView = new DataView(event.payload.buffer, event.payload.byteOffset, event.payload.byteLength);
+                            const nameLen = pView.getUint8(0);
+                            if (event.payload.byteLength < 1 + nameLen + 8) break;
+                            const nameBytes = new Uint8Array(event.payload.buffer, event.payload.byteOffset + 1, nameLen);
+                            const soundName = new TextDecoder().decode(nameBytes);
+                            const sx = pView.getFloat32(1 + nameLen, true).toFixed(1);
+                            const sz = pView.getFloat32(1 + nameLen + 4, true).toFixed(1);
+                            addEntry('sound', `${soundName} \u2014 pos(${sx}, ${sz}) \u2014 player ${event.playerId}`);
+                            break;
+                        }
+                        case EVENT_PLAYER_JOINED:
+                            addEntry('joined', `Player ${event.playerId} joined the room`);
+                            break;
+                        case EVENT_PLAYER_LEFT:
+                            addEntry('left', `Player ${event.playerId} left`);
+                            break;
+                        case EVENT_PLAYER_DIED: {
+                            let killerId = 0;
+                            if (event.payload && event.payload.byteLength >= 8) {
+                                const v = new DataView(event.payload.buffer, event.payload.byteOffset, event.payload.byteLength);
+                                killerId = v.getUint32(0, true) + v.getUint32(4, true) * 0x100000000;
+                            }
+                            addEntry('died', `Player ${event.playerId} killed by ${killerId}`);
+                            break;
+                        }
+                        case EVENT_PLAYER_RESPAWNED:
+                            addEntry('respawned', `Player ${event.playerId} respawned`);
+                            break;
+                        default:
+                            addEntry('sound', `Unknown event type=${event.eventType}`);
+                    }
+                });
+
+                client.onSnapshot(() => { counts.snap++; updateStats(); });
+
+                client.onDisconnect(() => {
+                    statusEl.textContent = 'Offline';
+                    statusEl.className = 'badge badge-offline';
+                    addEntry('left', 'Disconnected from server');
+                });
+
+            } catch (err) {
+                statusEl.textContent = 'Error';
+                statusEl.className = 'badge badge-offline';
+                if (emptyState) {
+                    emptyState.querySelector('p').textContent = err.message || 'Connection failed';
+                    emptyState.querySelector('.spinner').style.display = 'none';
+                }
+                addEntry('left', `Connection error: ${err.message}`);
+            }
+        });
+
+        // URL params
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('room')) document.getElementById('roomInput').value = params.get('room');
+        if (params.has('name')) document.getElementById('nameInput').value = params.get('name');
+
+        // Sidebar toggle (mobile)
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        document.getElementById('sidebarToggle').addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('open');
+        });
+        overlay.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+        });
+
+        // Auto-connect
+        setTimeout(() => document.getElementById('connectBtn').click(), 500);
+    </script>
+</body>
+</html>

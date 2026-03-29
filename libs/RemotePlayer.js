@@ -78,7 +78,7 @@ export function createRemotePlayer(scene, entityId, displayName) {
     remotePlayers.set(entityId, {
         mesh, color, tail, lastTailLength: 0,
         // Action detection state
-        wasOnGround: true, prevServerFlipping: false,
+        wasOnGround: true, prevServerFlipping: false, sprinting: false,
         // Flip animation state
         flipping: false, flipProgress: 0, baseYawQuat: new THREE.Quaternion(),
     });
@@ -136,6 +136,9 @@ export function updateRemotePlayer(entityId, state, dt, tailLength = 0) {
 
     remote.prevServerFlipping = serverFlipping;
     remote.wasOnGround = onGround;
+
+    // Sprint detection from flags bit 2 (0x04)
+    remote.sprinting = (state.flags & 0x04) !== 0;
 
     // --- Smooth position interpolation ---
     const lerpSpeed = 12;
@@ -320,6 +323,21 @@ export function getRemotePlayerCount() {
  * Get remote players currently doing a flip (for particle spawning).
  * @returns {Array<{ mesh: THREE.Mesh, flipProgress: number, baseYawQuat: THREE.Quaternion, color: THREE.Color }>}
  */
+export function getRemoteSprintData() {
+    const result = [];
+    for (const [entityId, remote] of remotePlayers) {
+        if (remote.sprinting && remote.mesh.visible) {
+            result.push({
+                mesh: remote.mesh,
+                color: remote.color,
+                vx: remote.vx || 0,
+                vz: remote.vz || 0,
+            });
+        }
+    }
+    return result;
+}
+
 export function getRemoteFlipData() {
     const result = [];
     for (const [entityId, remote] of remotePlayers) {

@@ -32,6 +32,7 @@ import {
     getRemoteRadarData,
     getRemotePlayerListData,
     getRemoteFlipData,
+    getRemoteSprintData,
 } from './RemotePlayer.js';
 import { StormTheme } from './themes/StormTheme.js';
 
@@ -84,6 +85,9 @@ export class GameLoop {
         this._remotePlayerMeshes = new Map(); // entityId -> mesh
         this._pickupMeshes = new Map(); // pickupId -> mesh
         this._fadingPickups = []; // { mesh, timer, duration, type }
+
+        // Spectator mode — when set, camera follows spectated player
+        this.spectatorTarget = null;
 
         // Champion crown
         this.championId = null;
@@ -653,12 +657,26 @@ export class GameLoop {
             }
         }
 
+        // 4d. Spectator mode: update entity list each frame
+        if (this.spectatorTarget && this.spectatorTarget.active) {
+            this.spectatorTarget.update(this._remotePlayerMeshes);
+        }
+
         // 5. Update listener position for spatial audio
-        if (this.playerMesh) {
-            setListenerPosition(this.playerMesh.position.x, this.playerMesh.position.z);
+        // Follow spectated player when spectating
+        const followMesh = (this.spectatorTarget && this.spectatorTarget.active)
+            ? this.spectatorTarget.getTargetMesh() || this.playerMesh
+            : this.playerMesh;
+        if (followMesh) {
+            setListenerPosition(followMesh.position.x, followMesh.position.z);
         }
 
         // 6. Visual effects that still run in network mode
+        // Set moveState.run for glow + particle effects (sprint in network mode)
+        if (localState) {
+            const serverSprinting = (localState.flags & 0x04) !== 0;
+            moveState.run = (moveState.sprintHeld || serverSprinting) ? 1 : 0;
+        }
         updatePlayerGlow(this.playerMesh);
         syncPlayerGlowState(glowState);
 
@@ -740,10 +758,17 @@ export class GameLoop {
         }
         this._updateFlipParticles();
 
-        // Speed particles (local player sprint)
+        // Speed particles (local player sprint + remote sprinters)
         const playerVel = localState ? { x: localState.vx, y: localState.vy, z: localState.vz } : { x: 0, y: 0, z: 0 };
         if (this.speedParticles) {
             this.speedParticles.update(playerVel, this.deltaTime);
+
+            // Spawn sprint particles for remote players
+            for (const rs of getRemoteSprintData()) {
+                if (Math.abs(rs.vx) > 0.1 || Math.abs(rs.vz) > 0.1) {
+                    this.speedParticles.spawnAt(rs.mesh.position, { x: rs.vx, z: rs.vz });
+                }
+            }
         }
 
         // Googly eyes (use actual velocity from server)
@@ -759,11 +784,14 @@ export class GameLoop {
         // Drift clouds
         updateClouds(this.deltaTime);
 
-        // Lighting
-        updateLightPosition(this.playerMesh.position);
+        // Lighting + camera: follow spectated player when spectating
+        const camTarget = (this.spectatorTarget && this.spectatorTarget.active)
+            ? this.spectatorTarget.getTargetMesh() || this.playerMesh
+            : this.playerMesh;
+        updateLightPosition(camTarget.position);
         updateAutoFollow(this.deltaTime, playerVel, moveState.run > 0);
         updateCameraOrbit(this.deltaTime);
-        updateCameraFollow(this.camera, this.controls, this.playerMesh, this.cameraLookAtOffset);
+        updateCameraFollow(this.camera, this.controls, camTarget, this.cameraLookAtOffset);
 
         // Radar (with remote players)
         this._updateNetworkRadar();
@@ -1093,9 +1121,10 @@ export class GameLoop {
         el.textContent = text;
         el.style.cssText = [
             'position:fixed', 'top:20%', 'left:50%', 'transform:translateX(-50%)',
-            'z-index:8000', 'font:bold 22px monospace', 'color:#fff', 'text-align:center',
+            'z-index:8000', 'font:bold clamp(14px, 4vw, 22px) monospace', 'color:#fff', 'text-align:center',
             'text-shadow:0 2px 12px rgba(0,0,0,0.7)', 'pointer-events:none',
-            'opacity:0', 'transition:opacity 0.8s ease-in-out', 'white-space:nowrap'
+            'opacity:0', 'transition:opacity 0.8s ease-in-out', 'max-width:90vw',
+            'padding:0 12px', 'box-sizing:border-box'
         ].join(';');
         document.body.appendChild(el);
         requestAnimationFrame(() => { el.style.opacity = '1'; });

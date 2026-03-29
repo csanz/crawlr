@@ -25,7 +25,7 @@ const EVENT_CONFIG = {
 function addItem(icon, text, color, bright) {
     if (!container) return;
     const el = document.createElement('div');
-    el.style.cssText = `font:13px monospace; color:${bright ? '#fff' : 'rgba(255,255,255,0.75)'}; text-shadow:0 0 6px rgba(0,0,0,0.9); padding:3px 0; white-space:nowrap; animation:feedIn 0.3s ease-out, feedOut 0.8s ease-in 6s forwards;`;
+    el.style.cssText = `font:clamp(10px, 2.5vw, 13px) monospace; color:${bright ? '#fff' : 'rgba(255,255,255,0.75)'}; text-shadow:0 0 6px rgba(0,0,0,0.9); padding:3px 0; max-width:45vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; animation:feedIn 0.3s ease-out, feedOut 0.8s ease-in 6s forwards;`;
     el.innerHTML = `<span style="color:${color}">${icon}</span> ${text}`;
     el.addEventListener('animationend', (e) => {
         if (e.animationName === 'feedOut') el.remove();

@@ -45,6 +45,8 @@ import { RoundManager } from './libs/RoundManager.js';
 import { initRoundHUD, hideRoundHUD, showRoundHUD } from './libs/RoundHUD.js';
 import { showPodiumScreen } from './libs/PodiumScreen.js';
 import { initActivityFeed } from './libs/ActivityFeed.js';
+import { initTouchControls } from './libs/TouchControls.js';
+import { initGameMenu } from './libs/GameMenu.js';
 
 const log = createLogger('App');
 
@@ -154,6 +156,8 @@ async function startGame(playerName) {
 
     const eventQueue = new RAPIER.EventQueue(true);
     initInputHandler(playerBody, playerMesh);
+    initTouchControls();
+    initGameMenu();
 
     const { blockMesh, blockBody } = createPushableBlock(scene, world, renderer);
     blockBody.userData = { type: 'block' };
@@ -430,6 +434,8 @@ async function startMultiplayerGame(playerName) {
     initTailSystem(renderer, playerMesh, scene, world);
 
     initInputHandler(playerBody, playerMesh);
+    initTouchControls();
+    initGameMenu();
 
     // Create a dummy block (still needed for visual scene)
     const { blockMesh, blockBody } = createPushableBlock(scene, world, renderer);

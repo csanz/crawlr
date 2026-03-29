@@ -78,6 +78,14 @@ export function registerEntityName(entityId, name) {
 }
 
 /**
+ * Get a snapshot of all known entity names.
+ * @returns {Map<string, string>}
+ */
+export function getPlayerNames() {
+    return new Map(nameMap);
+}
+
+/**
  * Get the display name for an entity id.
  * @param {string} entityId
  * @returns {string}

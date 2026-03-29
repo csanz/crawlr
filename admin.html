@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crawlr Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #191c21;
+    --surface: #1e2228;
+    --surface-raised: #252a31;
+    --border: #2d333b;
+    --border-subtle: #262b33;
+    --text: #c9d1d9;
+    --text-muted: #7d8590;
+    --text-faint: #545d68;
+    --white: #e6edf3;
+    --accent: #58a6ff;
+    --accent-muted: rgba(88,166,255,0.15);
+    --green: #3fb950;
+    --green-muted: rgba(63,185,80,0.15);
+    --yellow: #d29922;
+    --yellow-muted: rgba(210,153,34,0.15);
+    --danger: #f85149;
+    --danger-muted: rgba(248,81,73,0.12);
+    --radius: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 32px 40px;
+    max-width: 960px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  .header { display: flex; align-items: center; margin-bottom: 24px; padding-bottom: 16px;
+            border-bottom: 1px solid var(--border); }
+  .header h1 { font-size: 16px; font-weight: 600; color: var(--white); }
+  .header h1 span { color: var(--text-muted); font-weight: 400; margin-left: 8px; }
+  .ws-indicator { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted);
+                  margin-left: auto; }
+  .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint);
+            transition: background 0.3s, box-shadow 0.3s; }
+  .ws-dot.connected { background: var(--green); box-shadow: 0 0 8px rgba(63,185,80,0.4); }
+
+  /* Live Status */
+  .live-status { margin-bottom: 24px; }
+  .section-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+                   color: var(--text-faint); margin-bottom: 10px; }
+  .live-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 700px) { .live-grid { grid-template-columns: repeat(2, 1fr); } }
+  .live-card { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--radius);
+               padding: 14px 16px; }
+  .live-card-label { font-size: 11px; font-weight: 500; color: var(--text-faint); text-transform: uppercase;
+                     letter-spacing: 0.3px; margin-bottom: 6px; }
+  .live-card-value { font-size: 22px; font-weight: 600; color: var(--white); font-variant-numeric: tabular-nums; }
+  .live-card-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  .timer-bar { height: 3px; background: var(--surface-raised); border-radius: 2px; margin-top: 10px;
+               overflow: hidden; }
+  .timer-fill { height: 100%; border-radius: 2px; transition: width 0.5s linear; }
+  .timer-fill.ok { background: var(--green); }
+  .timer-fill.warn { background: var(--yellow); }
+  .timer-fill.danger { background: var(--danger); }
+
+  .weather-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px;
+                   font-weight: 600; letter-spacing: 0.3px; }
+  .weather-clear { background: var(--green-muted); color: var(--green); }
+  .weather-warning { background: var(--yellow-muted); color: var(--yellow); }
+  .weather-storm { background: var(--danger-muted); color: var(--danger); }
+
+  /* Room cards */
+  .room-cards { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .room-card { background: var(--surface-raised); border-radius: 4px; padding: 6px 10px;
+               display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+  .room-name { color: var(--accent); font-weight: 500; }
+  .room-players { color: var(--text-muted); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 0; }
+  .tab { padding: 10px 20px; background: none; border: none; border-bottom: 2px solid transparent;
+         cursor: pointer; color: var(--text-muted); font-family: inherit; font-size: 13px; font-weight: 500;
+         transition: color 0.15s, border-color 0.15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--white); border-bottom-color: var(--accent); }
+
+  /* Content area */
+  .content-panel { background: var(--surface); border: 1px solid var(--border-subtle); border-top: none;
+                   border-radius: 0 0 var(--radius) var(--radius); }
+  .content-panel.direct { padding: 16px 20px; }
+
+  /* Themes layout */
+  .themes-layout { display: flex; min-height: 300px; }
+  .theme-sidebar { width: 180px; border-right: 1px solid var(--border-subtle); padding: 8px; flex-shrink: 0; }
+  .theme-sidebar-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+                         color: var(--text-faint); padding: 8px 12px 6px; }
+  .theme-item { display: block; width: 100%; text-align: left; padding: 8px 12px; border: none;
+                background: none; color: var(--text-muted); font-family: inherit; font-size: 13px;
+                border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+  .theme-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .theme-item.active { color: var(--white); background: var(--surface-raised); }
+  .theme-content { flex: 1; padding: 16px 20px; }
+
+  /* Fields */
+  .field { display: flex; align-items: center; gap: 12px; padding: 10px 0;
+           border-bottom: 1px solid var(--border-subtle); }
+  .field:last-child { border-bottom: none; }
+  .field-label { flex: 0 0 210px; color: var(--text-muted); font-size: 13px; }
+
+  /* Custom range slider */
+  .field input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 4px; background: var(--border); border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  .field input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--text-muted); border: 2px solid var(--surface);
+    cursor: pointer; transition: background 0.15s;
+  }
+  .field input[type=range]:hover::-webkit-slider-thumb { background: var(--text); }
+  .field input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--text-muted); border: 2px solid var(--surface); cursor: pointer;
+  }
+  .field input[type=range]::-moz-range-track {
+    height: 4px; background: var(--border); border-radius: 2px;
+  }
+
+  .field input[type=number] { width: 80px; background: var(--bg); border: 1px solid var(--border);
+                               color: var(--text); padding: 6px 10px; border-radius: var(--radius);
+                               font-family: inherit; font-size: 13px; text-align: right;
+                               transition: border-color 0.15s; }
+  .field input[type=number]:focus { outline: none; border-color: var(--accent);
+                                     box-shadow: 0 0 0 3px var(--accent-muted); }
+  .btn-reset { background: none; border: 1px solid var(--border); color: var(--text-faint); padding: 4px 10px;
+               border-radius: var(--radius); cursor: pointer; font-size: 11px; font-family: inherit;
+               transition: all 0.15s; }
+  .btn-reset:hover { border-color: var(--text-muted); color: var(--text-muted); }
+
+  /* Actions */
+  .actions { display: flex; gap: 10px; margin-top: 20px; }
+  .btn { padding: 8px 18px; border: none; border-radius: var(--radius); cursor: pointer;
+         font-family: inherit; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+  .btn-save { background: var(--accent); color: #fff; }
+  .btn-save:hover { background: #79b8ff; }
+  .btn-danger { background: none; border: 1px solid var(--border); color: var(--text-muted); }
+  .btn-danger:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* Status toast */
+  .status { margin-top: 16px; padding: 10px 14px; border-radius: var(--radius); display: none; font-size: 13px; }
+  .status.ok { display: block; background: var(--green-muted); color: var(--green); }
+  .status.err { display: block; background: var(--danger-muted); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Settings <span>crawlr</span></h1>
+  <div class="ws-indicator">
+    <span class="ws-dot" id="ws-dot"></span>
+    <span id="ws-label">Connecting...</span>
+  </div>
+</div>
+
+<div class="live-status">
+  <div class="section-label">Live Status</div>
+  <div class="live-grid">
+    <div class="live-card">
+      <div class="live-card-label">Round Timer</div>
+      <div class="live-card-value" id="live-timer">--:--</div>
+      <div class="live-card-sub" id="live-timer-sub">-- / --</div>
+      <div class="timer-bar"><div class="timer-fill ok" id="live-timer-bar" style="width:100%"></div></div>
+    </div>
+    <div class="live-card">
+      <div class="live-card-label">Weather</div>
+      <div class="live-card-value" id="live-weather"><span class="weather-badge weather-clear">Clear</span></div>
+      <div class="live-card-sub" id="live-weather-sub">&nbsp;</div>
+    </div>
+    <div class="live-card">
+      <div class="live-card-label">Players</div>
+      <div class="live-card-value" id="live-players">0</div>
+      <div class="live-card-sub" id="live-players-sub">0 humans, 0 bots</div>
+    </div>
+    <div class="live-card">
+      <div class="live-card-label">Rooms</div>
+      <div class="live-card-value" id="live-rooms">0</div>
+      <div class="room-cards" id="live-room-cards"></div>
+    </div>
+  </div>
+</div>
+
+<div class="section-label">Configuration</div>
+<div class="tabs">
+  <div class="tab active" data-tab="general" onclick="switchTopTab('general')">General</div>
+  <div class="tab" data-tab="themes" onclick="switchTopTab('themes')">Themes</div>
+</div>
+
+<!-- General panel -->
+<div id="panel-general" class="content-panel direct"></div>
+
+<!-- Themes panel -->
+<div id="panel-themes" class="content-panel" style="display:none">
+  <div class="themes-layout">
+    <div class="theme-sidebar">
+      <div class="theme-sidebar-label">Themes</div>
+      <button class="theme-item active" data-theme="storm" onclick="selectTheme('storm')">Storm</button>
+    </div>
+    <div class="theme-content" id="theme-fields"></div>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn btn-save" onclick="saveChanges()">Save Changes</button>
+  <button class="btn btn-danger" onclick="resetAll()">Reset to Defaults</button>
+</div>
+
+<div id="status" class="status"></div>
+
+<script type="module">
+import { ADMIN_API_URL } from './libs/PhysicsConfig.js';
+
+const API = ADMIN_API_URL;
+const WS_RECONNECT_DELAY = 3000;
+
+const DEFAULTS = {
+  general: {
+    player_speed:        { val: 5.5, min: 1, max: 20, step: 0.1, label: 'Player Speed' },
+    player_run_multiplier:{ val: 1.6, min: 1, max: 4, step: 0.1, label: 'Run Multiplier' },
+    jump_velocity:       { val: 8.5, min: 1, max: 20, step: 0.5, label: 'Jump Velocity' },
+    gravity:             { val: 9.81, min: 1, max: 30, step: 0.1, label: 'Gravity' },
+    boundary:            { val: 120, min: 20, max: 500, step: 10, label: 'Boundary' },
+    max_coins:           { val: 500, min: 10, max: 2000, step: 10, label: 'Max Coins' },
+    coin_spawn_interval: { val: 0.15, min: 0.01, max: 5, step: 0.01, label: 'Coin Spawn Interval (s)' },
+    max_fruits:          { val: 12, min: 0, max: 100, step: 1, label: 'Max Fruits' },
+    fruit_spawn_interval:{ val: 4.0, min: 0.5, max: 30, step: 0.5, label: 'Fruit Spawn Interval (s)' },
+    max_rings:           { val: 10, min: 0, max: 50, step: 1, label: 'Max Rings' },
+    ring_spawn_interval: { val: 4.0, min: 0.5, max: 30, step: 0.5, label: 'Ring Spawn Interval (s)' },
+    ring_despawn_time:   { val: 15.0, min: 5, max: 120, step: 1, label: 'Ring Despawn Time (s)' },
+    round_duration:      { val: 600, min: 30, max: 3600, step: 30, label: 'Round Duration (s)' },
+  },
+  storm: {
+    lightning_interval_min:{ val: 1.5, min: 0.1, max: 10, step: 0.1, label: 'Lightning Min Interval (s)' },
+    lightning_interval_max:{ val: 3.0, min: 0.5, max: 20, step: 0.1, label: 'Lightning Max Interval (s)' },
+    storm_duration:       { val: 30, min: 5, max: 120, step: 5, label: 'Storm Duration (s)' },
+    puddle_interval_min:  { val: 2.0, min: 0.5, max: 10, step: 0.1, label: 'Puddle Min Interval (s)' },
+    puddle_interval_max:  { val: 3.5, min: 1, max: 20, step: 0.1, label: 'Puddle Max Interval (s)' },
+    puddle_radius:        { val: 4.0, min: 1, max: 20, step: 0.5, label: 'Puddle Radius' },
+    puddle_max_age:       { val: 14.0, min: 5, max: 60, step: 1, label: 'Puddle Max Age (s)' },
+    lightning_radius:     { val: 8.0, min: 1, max: 30, step: 0.5, label: 'Lightning Radius' },
+    lightning_size_loss:  { val: 0.15, min: 0.01, max: 1, step: 0.01, label: 'Lightning Size Loss' },
+    water_drop_count:     { val: 20, min: 0, max: 100, step: 1, label: 'Water Drop Count' },
+  }
+};
+
+let currentSettings = { general: {}, storm: {} };
+let currentTopTab = 'general';
+let currentTheme = 'storm';
+let ws = null;
+let wsReconnectTimer = null;
+
+// ── WebSocket ───────────────────────────────────────────────────────────
+
+function connectWebSocket() {
+  if (ws && ws.readyState <= WebSocket.OPEN) return;
+  const wsUrl = API.replace(/^http/, 'ws') + '/api/lobby/ws';
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => {
+    document.getElementById('ws-dot').classList.add('connected');
+    document.getElementById('ws-label').textContent = 'Connected';
+  };
+  ws.onmessage = (event) => {
+    try {
+      const servers = JSON.parse(event.data);
+      if (Array.isArray(servers)) updateLiveStatus(servers);
+    } catch (e) { /* silent */ }
+  };
+  ws.onclose = () => {
+    ws = null;
+    document.getElementById('ws-dot').classList.remove('connected');
+    document.getElementById('ws-label').textContent = 'Reconnecting...';
+    wsReconnectTimer = setTimeout(connectWebSocket, WS_RECONNECT_DELAY);
+  };
+  ws.onerror = () => {};
+}
+
+function formatTime(seconds) {
+  if (seconds == null || isNaN(seconds)) return '--:--';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function updateLiveStatus(servers) {
+  const totalHumans = servers.reduce((sum, s) => sum + (s.human_count || 0), 0);
+  const totalBots = servers.reduce((sum, s) => sum + (s.bot_count || 0), 0);
+  const gs = servers[0];
+
+  if (gs && gs.round_remaining != null) {
+    const remaining = gs.round_remaining;
+    const duration = gs.round_duration || 600;
+    const pct = Math.max(0, Math.min(100, (remaining / duration) * 100));
+    document.getElementById('live-timer').textContent = formatTime(remaining);
+    document.getElementById('live-timer-sub').textContent = `${formatTime(remaining)} / ${formatTime(duration)}`;
+    const bar = document.getElementById('live-timer-bar');
+    bar.style.width = pct + '%';
+    bar.className = 'timer-fill ' + (pct > 50 ? 'ok' : pct > 20 ? 'warn' : 'danger');
+  } else {
+    document.getElementById('live-timer').textContent = '--:--';
+    document.getElementById('live-timer-sub').textContent = 'No active game';
+    document.getElementById('live-timer-bar').style.width = '0%';
+  }
+
+  if (gs && gs.weather) {
+    const w = gs.weather;
+    const labels = { clear: 'Clear', warning: 'Storm Warning', storm: 'Storm Active' };
+    const classes = { clear: 'weather-clear', warning: 'weather-warning', storm: 'weather-storm' };
+    document.getElementById('live-weather').innerHTML =
+      `<span class="weather-badge ${classes[w] || 'weather-clear'}">${labels[w] || w}</span>`;
+    if (w === 'storm' && gs.storm_remaining > 0) {
+      document.getElementById('live-weather-sub').textContent = `${formatTime(gs.storm_remaining)} remaining`;
+    } else if (w === 'warning' && gs.storm_remaining > 0) {
+      document.getElementById('live-weather-sub').textContent = `Storm in ${formatTime(gs.storm_remaining)}`;
+    } else {
+      document.getElementById('live-weather-sub').innerHTML = '&nbsp;';
+    }
+  }
+
+  document.getElementById('live-players').textContent = totalHumans + totalBots;
+  document.getElementById('live-players-sub').textContent = `${totalHumans} human${totalHumans !== 1 ? 's' : ''}, ${totalBots} bot${totalBots !== 1 ? 's' : ''}`;
+
+  document.getElementById('live-rooms').textContent = servers.length;
+  const cardsEl = document.getElementById('live-room-cards');
+  if (servers.length === 0) {
+    cardsEl.innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:4px 0">No active rooms</div>';
+  } else {
+    cardsEl.innerHTML = servers.map(s =>
+      `<div class="room-card">
+        <span class="room-name">${escapeHtml(s.name || s.server_id)}</span>
+        <span class="room-players">${s.human_count || 0} + ${s.bot_count || 0}</span>
+      </div>`
+    ).join('');
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+// ── Tab / Theme switching ───────────────────────────────────────────────
+
+window.switchTopTab = function(tab) {
+  currentTopTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.getElementById('panel-general').style.display = tab === 'general' ? 'block' : 'none';
+  document.getElementById('panel-themes').style.display = tab === 'themes' ? 'block' : 'none';
+};
+
+window.selectTheme = function(themeId) {
+  currentTheme = themeId;
+  document.querySelectorAll('.theme-item').forEach(t => t.classList.toggle('active', t.dataset.theme === themeId));
+  buildFields(themeId, 'theme-fields');
+};
+
+// ── Settings UI ─────────────────────────────────────────────────────────
+
+function buildFields(section, panelId) {
+  const panel = document.getElementById(panelId);
+  panel.innerHTML = '';
+  const defs = DEFAULTS[section];
+  if (!defs) return;
+  for (const [key, cfg] of Object.entries(defs)) {
+    const val = currentSettings[section]?.[key] ?? cfg.val;
+    const isInt = Number.isInteger(cfg.val) && Number.isInteger(cfg.step);
+    panel.innerHTML += `
+      <div class="field">
+        <span class="field-label">${cfg.label}</span>
+        <input type="range" id="r_${section}_${key}" min="${cfg.min}" max="${cfg.max}" step="${cfg.step}"
+               value="${val}" oninput="window._syncNum('${section}','${key}')">
+        <input type="number" id="n_${section}_${key}" min="${cfg.min}" max="${cfg.max}" step="${cfg.step}"
+               value="${isInt ? val : parseFloat(val).toFixed(2)}" oninput="window._syncRange('${section}','${key}')">
+        <button class="btn-reset" onclick="window._resetField('${section}','${key}')">reset</button>
+      </div>`;
+  }
+}
+
+window._syncNum = function(section, key) {
+  const v = document.getElementById(`r_${section}_${key}`).value;
+  const cfg = DEFAULTS[section][key];
+  const isInt = Number.isInteger(cfg.val) && Number.isInteger(cfg.step);
+  document.getElementById(`n_${section}_${key}`).value = isInt ? parseInt(v) : parseFloat(v).toFixed(2);
+};
+
+window._syncRange = function(section, key) {
+  document.getElementById(`r_${section}_${key}`).value = document.getElementById(`n_${section}_${key}`).value;
+};
+
+window._resetField = function(section, key) {
+  const cfg = DEFAULTS[section][key];
+  document.getElementById(`r_${section}_${key}`).value = cfg.val;
+  const isInt = Number.isInteger(cfg.val) && Number.isInteger(cfg.step);
+  document.getElementById(`n_${section}_${key}`).value = isInt ? cfg.val : parseFloat(cfg.val).toFixed(2);
+};
+
+function getActiveSection() {
+  return currentTopTab === 'general' ? 'general' : currentTheme;
+}
+
+function collectValues(section) {
+  const result = {};
+  const defs = DEFAULTS[section];
+  if (!defs) return result;
+  for (const key of Object.keys(defs)) {
+    const cfg = defs[key];
+    const v = parseFloat(document.getElementById(`n_${section}_${key}`).value);
+    const isInt = Number.isInteger(cfg.val) && Number.isInteger(cfg.step);
+    result[key] = isInt ? Math.round(v) : v;
+  }
+  return result;
+}
+
+function showStatus(msg, ok) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+  setTimeout(() => { el.className = 'status'; }, 3000);
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch(`${API}/api/settings`);
+    if (res.ok) {
+      currentSettings = await res.json();
+      buildFields('general', 'panel-general');
+      buildFields(currentTheme, 'theme-fields');
+    }
+  } catch (e) { /* silent */ }
+}
+
+window.saveChanges = async function() {
+  try {
+    const section = getActiveSection();
+    const data = collectValues(section);
+    const res = await fetch(`${API}/api/settings/${section}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      showStatus(`${section} settings saved and broadcast to all rooms`, true);
+    } else {
+      const err = await res.json();
+      showStatus(`Save failed: ${err.error || res.statusText}`, false);
+    }
+  } catch (e) {
+    showStatus(`Network error: ${e.message}`, false);
+  }
+};
+
+window.resetAll = async function() {
+  if (!confirm('Reset ALL settings to defaults?')) return;
+  try {
+    const res = await fetch(`${API}/api/settings/reset`, { method: 'POST' });
+    if (res.ok) {
+      showStatus('All settings reset to defaults', true);
+      await loadSettings();
+    } else {
+      showStatus('Reset failed', false);
+    }
+  } catch (e) {
+    showStatus(`Network error: ${e.message}`, false);
+  }
+};
+
+// Init
+loadSettings();
+connectWebSocket();
+</script>
+</body>
+</html>

@@ -7,4 +7,14 @@ html, body {
 
 canvas {
     display: block; /* Prevent potential extra space below canvas */
+}
+
+/* Prevent default touch behaviors on mobile (long-press menus, text selection, pull-to-refresh) */
+@media (pointer: coarse) {
+    html, body, canvas {
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
 } 

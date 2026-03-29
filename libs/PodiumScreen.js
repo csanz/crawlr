@@ -118,14 +118,31 @@ export function showPodiumScreen({ rankings, roundNumber, getEntityName, localPl
         subtitle.style.cssText = 'font-size:12px; color:rgba(255,255,255,0.4); margin-bottom:28px; text-transform:uppercase; letter-spacing:4px;';
         box.appendChild(subtitle);
 
-        // Podium entries
-        const avatarSizes = [52, 44, 40]; // 1st bigger
+        // === Top 3 podium ===
+        const top3 = rankings.slice(0, 3);
+        const avatarSizes = [52, 44, 40];
 
-        for (let i = 0; i < rankings.length; i++) {
-            const r = rankings[i];
+        for (let i = 0; i < 3; i++) {
+            const r = top3[i];
+            if (!r) {
+                // Empty podium slot
+                const row = document.createElement('div');
+                row.style.cssText = [
+                    'display:flex', 'align-items:center', 'gap:14px',
+                    'padding:12px 16px', 'margin-bottom:10px',
+                    'border-radius:8px', 'background:rgba(255,255,255,0.02)',
+                    'border:1px solid rgba(255,255,255,0.04)',
+                    'color:rgba(255,255,255,0.15)', 'font-size:13px',
+                    `animation:podiumSlideUp 0.5s ease-out ${0.3 + i * 0.2}s both`
+                ].join(';');
+                row.textContent = `${MEDAL_LABELS[i]} \u2014 empty`;
+                box.appendChild(row);
+                continue;
+            }
+
             const name = r.name || (getEntityName ? getEntityName(r.id) : r.id);
             const isPlayer = r.id === 'player' || (localPlayerId != null && r.id === localPlayerId);
-            const medalColor = MEDAL_COLORS[i] || '#888';
+            const medalColor = MEDAL_COLORS[i];
 
             const row = document.createElement('div');
             row.style.cssText = [
@@ -135,7 +152,7 @@ export function showPodiumScreen({ rankings, roundNumber, getEntityName, localPl
                 `background:${isPlayer ? 'rgba(0,255,204,0.12)' : 'rgba(255,255,255,0.04)'}`,
                 `border:1px solid ${isPlayer ? 'rgba(0,255,204,0.25)' : 'rgba(255,255,255,0.06)'}`,
                 `animation:podiumSlideUp 0.5s ease-out ${0.3 + i * 0.2}s both`,
-                i === 0 ? 'box-shadow:0 0 20px rgba(255,215,0,0.1)' : ''
+                i === 0 ? 'box-shadow:0 0 20px rgba(255,215,0,0.15)' : ''
             ].join(';');
 
             // Medal badge
@@ -144,11 +161,11 @@ export function showPodiumScreen({ rankings, roundNumber, getEntityName, localPl
                 'font-size:22px', 'flex-shrink:0', 'width:30px', 'text-align:center',
                 `animation:podiumBounce 0.5s ease-out ${0.5 + i * 0.2}s both`
             ].join(';');
-            medal.textContent = MEDAL_EMOJI[i] || MEDAL_LABELS[i];
+            medal.textContent = MEDAL_EMOJI[i];
             row.appendChild(medal);
 
             // Snake avatar
-            const avatar = createSnakeAvatar(r.color || '#888', avatarSizes[i] || 40);
+            const avatar = createSnakeAvatar(r.color || '#888', avatarSizes[i]);
             avatar.style.animation = `podiumBounce 0.4s ease-out ${0.6 + i * 0.2}s both`;
             row.appendChild(avatar);
 
@@ -185,19 +202,65 @@ export function showPodiumScreen({ rankings, roundNumber, getEntityName, localPl
             box.appendChild(row);
         }
 
-        // Empty podium slots
-        for (let i = rankings.length; i < 3; i++) {
-            const row = document.createElement('div');
-            row.style.cssText = [
-                'display:flex', 'align-items:center', 'gap:14px',
-                'padding:12px 16px', 'margin-bottom:10px',
-                'border-radius:8px', 'background:rgba(255,255,255,0.02)',
-                'border:1px solid rgba(255,255,255,0.04)',
-                'color:rgba(255,255,255,0.15)', 'font-size:13px',
-                `animation:podiumSlideUp 0.5s ease-out ${0.3 + i * 0.2}s both`
+        // === Rest of leaderboard (4th and below) — compact scrollable list ===
+        const rest = rankings.slice(3);
+        if (rest.length > 0) {
+            const restLabel = document.createElement('div');
+            restLabel.textContent = 'Leaderboard';
+            restLabel.style.cssText = 'font-size:10px; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:3px; margin:16px 0 8px; text-align:left;';
+            box.appendChild(restLabel);
+
+            const listWrap = document.createElement('div');
+            listWrap.style.cssText = [
+                'max-height:140px', 'overflow-y:auto', 'border-radius:8px',
+                'background:rgba(255,255,255,0.02)', 'border:1px solid rgba(255,255,255,0.05)',
+                'animation:podiumSlideUp 0.5s ease-out 0.9s both',
+                'scrollbar-width:thin', 'scrollbar-color:rgba(255,255,255,0.15) transparent',
             ].join(';');
-            row.textContent = `${MEDAL_LABELS[i]} \u2014 empty`;
-            box.appendChild(row);
+
+            for (let i = 0; i < rest.length; i++) {
+                const r = rest[i];
+                const rank = i + 4;
+                const name = r.name || (getEntityName ? getEntityName(r.id) : r.id);
+                const isPlayer = r.id === 'player' || (localPlayerId != null && r.id === localPlayerId);
+
+                const row = document.createElement('div');
+                row.style.cssText = [
+                    'display:flex', 'align-items:center', 'gap:8px',
+                    'padding:6px 12px',
+                    i < rest.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.04)' : '',
+                    isPlayer ? 'background:rgba(0,255,204,0.08)' : '',
+                ].join(';');
+
+                // Rank number
+                const rankEl = document.createElement('span');
+                rankEl.textContent = `${rank}.`;
+                rankEl.style.cssText = 'color:rgba(255,255,255,0.3); font-size:11px; width:24px; text-align:right; flex-shrink:0;';
+                row.appendChild(rankEl);
+
+                // Color dot
+                const dot = document.createElement('span');
+                dot.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:50%;background:${r.color || '#888'};flex-shrink:0;`;
+                row.appendChild(dot);
+
+                // Name
+                const nameEl = document.createElement('span');
+                nameEl.textContent = name;
+                nameEl.style.cssText = [
+                    `color:${isPlayer ? '#00ffcc' : 'rgba(255,255,255,0.7)'}`,
+                    'font-size:12px', 'flex:1', 'overflow:hidden', 'text-overflow:ellipsis', 'white-space:nowrap',
+                ].join(';');
+                row.appendChild(nameEl);
+
+                // Score
+                const scoreEl = document.createElement('span');
+                scoreEl.textContent = r.score;
+                scoreEl.style.cssText = 'color:rgba(255,255,255,0.4); font-size:12px; min-width:30px; text-align:right;';
+                row.appendChild(scoreEl);
+
+                listWrap.appendChild(row);
+            }
+            box.appendChild(listWrap);
         }
 
         // Bottom section: loading bar + button

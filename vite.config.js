@@ -9,6 +9,9 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [wasm()],
+  server: {
+    host: true, // listen on all interfaces (allows phone access via LAN IP)
+  },
   build: {
     target: 'esnext',
     rollupOptions: {
