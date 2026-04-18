@@ -369,6 +369,7 @@ export class CrawlrNet {
                     const tailLength = reView.getUint16(reOff, true); reOff += 2;
                     const scale = reView.getFloat32(reOff, true); reOff += 4;
                     const nameLen = reView.getUint8(reOff); reOff += 1;
+                    if (reOff + nameLen > event.payload.byteLength) break;
                     const nameBytes = new Uint8Array(event.payload.buffer, event.payload.byteOffset + reOff, nameLen);
                     const name = decoder.decode(nameBytes);
                     reOff += nameLen;
@@ -401,6 +402,7 @@ export class CrawlrNet {
             case EVENT_CHAT: {
                 if (!event.payload || event.payload.byteLength < 4) break;
                 const chat = decodeChatPayload(event.payload);
+                if (!chat) break;
                 eventBus.emit('chat:message', {
                     senderId: event.playerId,
                     senderName: chat.senderName,
@@ -419,6 +421,7 @@ export class CrawlrNet {
             case EVENT_WHISPER: {
                 if (!event.payload || event.payload.byteLength < 4) break;
                 const whisper = decodeWhisperPayload(event.payload);
+                if (!whisper) break;
                 eventBus.emit('chat:whisper', {
                     senderName: whisper.senderName,
                     text: whisper.text,
@@ -580,6 +583,7 @@ function decodeSnapshotExtra(data) {
         const tailLength = view.getUint16(offset, true); offset += 2;
         const powerUp = view.getUint8(offset); offset += 1;
         const nameLen = view.getUint8(offset); offset += 1;
+        if (offset + nameLen > data.byteLength) break;
         const nameBytes = new Uint8Array(data.buffer, data.byteOffset + offset, nameLen);
         const displayName = decoder.decode(nameBytes);
         offset += nameLen;
@@ -625,10 +629,13 @@ function decodeChatPayload(payload) {
     const decoder = new TextDecoder();
     let offset = 0;
     const nameLen = view.getUint8(offset); offset += 1;
+    if (offset + nameLen > payload.byteLength) return null;
     const nameBytes = new Uint8Array(payload.buffer, payload.byteOffset + offset, nameLen);
     const senderName = decoder.decode(nameBytes);
     offset += nameLen;
+    if (offset + 2 > payload.byteLength) return null;
     const textLen = view.getUint16(offset, true); offset += 2;
+    if (offset + textLen > payload.byteLength) return null;
     const textBytes = new Uint8Array(payload.buffer, payload.byteOffset + offset, textLen);
     const text = decoder.decode(textBytes);
     return { senderName, text };
@@ -649,11 +656,14 @@ function decodeChatHistoryPayload(payload) {
         offset += 8;
 
         const nameLen = view.getUint8(offset); offset += 1;
+        if (offset + nameLen > payload.byteLength) break;
         const nameBytes = new Uint8Array(payload.buffer, payload.byteOffset + offset, nameLen);
         const senderName = decoder.decode(nameBytes);
         offset += nameLen;
 
+        if (offset + 2 > payload.byteLength) break;
         const textLen = view.getUint16(offset, true); offset += 2;
+        if (offset + textLen > payload.byteLength) break;
         const textBytes = new Uint8Array(payload.buffer, payload.byteOffset + offset, textLen);
         const text = decoder.decode(textBytes);
         offset += textLen;
@@ -669,13 +679,17 @@ function decodeWhisperPayload(payload) {
     const decoder = new TextDecoder();
     let offset = 0;
     const nameLen = view.getUint8(offset); offset += 1;
+    if (offset + nameLen > payload.byteLength) return null;
     const nameBytes = new Uint8Array(payload.buffer, payload.byteOffset + offset, nameLen);
     const senderName = decoder.decode(nameBytes);
     offset += nameLen;
+    if (offset + 2 > payload.byteLength) return null;
     const textLen = view.getUint16(offset, true); offset += 2;
+    if (offset + textLen > payload.byteLength) return null;
     const textBytes = new Uint8Array(payload.buffer, payload.byteOffset + offset, textLen);
     const text = decoder.decode(textBytes);
     offset += textLen;
+    if (offset >= payload.byteLength) return null;
     const direction = view.getUint8(offset);
     return { senderName, text, direction };
 }
