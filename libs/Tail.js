@@ -228,6 +228,25 @@ export class SnakeTail {
     }
 
     /**
+     * Pushes a position to the OLD end of the ring buffer (for seeding history backward).
+     * Used by remote players to pre-fill history so tail segments spread out immediately.
+     * @param {number} x
+     * @param {number} y
+     * @param {number} z
+     */
+    pushHistoryBack(x, y, z) {
+        if (this.historyCount >= this.maxHistoryLength) return;
+        // The oldest entry is at (historyHead - historyCount + 1) mod max.
+        // We insert one step before the current oldest.
+        const oldestSlot = (this.historyHead - this.historyCount + this.maxHistoryLength) % this.maxHistoryLength;
+        const offset = oldestSlot * 3;
+        this.positionHistory[offset] = x;
+        this.positionHistory[offset + 1] = y;
+        this.positionHistory[offset + 2] = z;
+        this.historyCount++;
+    }
+
+    /**
      * Adds a new tail segment with glow mesh and physics sensor at the given position.
      * @param {THREE.Vector3} initialPosition
      * @returns {THREE.Mesh|null}

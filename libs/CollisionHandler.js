@@ -3,7 +3,7 @@
  * Processes physics collision events and dispatches to the unified PickupManager.
  */
 import { createLogger } from './Logger.js';
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 
 const log = createLogger('Collision');
 

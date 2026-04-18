@@ -3,7 +3,7 @@
  * Central round lifecycle manager. Tracks countdown timer, emits round events,
  * and computes end-of-round rankings from entity data.
  */
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { ROUND_DURATION } from './PhysicsConfig.js';
 
 export class RoundManager {

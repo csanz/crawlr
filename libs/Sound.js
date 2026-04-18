@@ -96,8 +96,8 @@ function loadSounds() {
     // Gameplay sounds
     loadSound('coinCollect', '/coin-collect.mp3');
     loadSound('fruitCollect', '/coin-collect-large.mp3');
-    loadSound('ringJump', '/ring-jump.mp3');
-    loadSound('ringHit', '/ring-hit.mp3');
+    loadSound('ringJump', '/effects/woohoo.mp3');
+    loadSound('ringHit', '/effects/electrocuted-ring.mp3');
 
     // Theme sounds
     loadSound('storm', '/themes/theme_storm_ambient.mp3');
@@ -200,15 +200,11 @@ export function isAmbientMuted() {
  * @returns {Object|undefined} Handle with stop() and setVolume()
  */
 export function playSound(name, volume = 1.0) {
-    if (muted) return;
-    if (!audioContext) {
-        log.warn('Audio context not initialized — call initSoundSystem first');
-        return;
-    }
+    if (muted || !audioContext) return;
 
     const sound = sounds[name];
     if (!sound) {
-        log.warn(`Sound "${name}" not loaded yet`);
+        log.debug(`Sound "${name}" not loaded yet`);
         return;
     }
 
@@ -275,7 +271,7 @@ export function playSnippet(name, { volume = 0.3, duration = 5, fadeOut = 2 } = 
 
     const buffer = sounds[name];
     if (!buffer) {
-        log.warn(`Sound "${name}" not loaded yet (snippet)`);
+        log.debug(`Sound "${name}" not loaded yet (snippet)`);
         return;
     }
 

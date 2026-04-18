@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d';
 import { BasePickup } from './BasePickup.js';
 import { MAX_RINGS, RING_SPAWN_AREA_XZ, RING_STAMINA_PENALTY } from '../PhysicsConfig.js';
-import { eventBus } from '../EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { playEffect, playSpatialEffect, playSnippet } from '../Sound.js';
 
 // Ring color palette

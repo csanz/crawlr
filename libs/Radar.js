@@ -7,25 +7,27 @@ import { GROUND_SIZE_VISUAL } from './PhysicsConfig.js';
 // Cache canvas reference and context - avoid DOM lookup every frame
 let _radarCanvas = null;
 let _radarCtx = null;
-let _expanded = false;
+// Radar size levels: 0=small, 1=medium (corner), 2=large
+let _sizeLevel = 0;
+const RADAR_SIZES = [150, 275, 400];
 
 /**
- * Toggle radar between small (150px) and expanded (400px).
- * @returns {boolean} New expanded state
+ * Toggle radar through 3 levels: small → medium → large → small.
+ * @returns {number} New size level (0, 1, 2)
  */
 export function toggleRadarSize() {
-    _expanded = !_expanded;
+    _sizeLevel = (_sizeLevel + 1) % 3;
     if (!_radarCanvas) {
         _radarCanvas = document.getElementById('radar');
-        if (!_radarCanvas) return _expanded;
+        if (!_radarCanvas) return _sizeLevel;
         _radarCtx = _radarCanvas.getContext('2d');
     }
-    const size = _expanded ? 400 : 150;
+    const size = RADAR_SIZES[_sizeLevel];
     _radarCanvas.width = size;
     _radarCanvas.height = size;
     _radarCanvas.style.width = size + 'px';
     _radarCanvas.style.height = size + 'px';
-    return _expanded;
+    return _sizeLevel;
 }
 
 /**

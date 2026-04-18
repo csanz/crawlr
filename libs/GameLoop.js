@@ -9,13 +9,13 @@ import { updatePositionHistory, updateTailPositions, getPlayerTail, syncPlayerGl
 import { updateCameraFollow, updateCameraOrbit, updateAutoFollow, stepOrbitLeft, stepOrbitRight, cycleZoom, cycleAngle } from './CameraSetup.js';
 import { syncMuteButton } from './MuteButton.js';
 import { updateLightPosition } from './Lighting.js';
-import { drawRadar } from './Radar.js';
+import { drawRadar, toggleRadarSize } from './Radar.js';
 import { SpeedParticleSystem } from './SpeedParticles.js';
 import { moveState, pendingJumps, setInputNetworkMode } from './InputHandler.js';
 import { updateSprint, getSprintState } from './SprintSystem.js';
 import { drawSprintHUD } from './SprintHUD.js';
 import { updateScoreHUD } from './ScoreHUD.js';
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { updatePlayerList } from './PlayerList.js';
 import { updateLeaderboardStats } from './Leaderboard.js';
 import { updatePowerUpHUD } from './PowerUpHUD.js';
@@ -35,6 +35,7 @@ import {
     getRemoteSprintData,
 } from './RemotePlayer.js';
 import { StormTheme } from './themes/StormTheme.js';
+import { drawFriendIndicators } from './FriendFinder.js';
 
 const log = createLogger('GameLoop');
 
@@ -43,6 +44,12 @@ const _tmpColor = new THREE.Color(0x88bbff);
 const _tmpVec3 = new THREE.Vector3();
 const _tmpQuat = new THREE.Quaternion();
 const _upVec = new THREE.Vector3(0, 1, 0);
+const _playerEuler = new THREE.Euler();
+const _fwdVec = new THREE.Vector3();
+const _flipRight = new THREE.Vector3();
+const _flipQuat = new THREE.Quaternion();
+const _initPos = new THREE.Vector3();
+const _camDir = new THREE.Vector3();
 
 export class GameLoop {
     /**
@@ -169,6 +176,18 @@ export class GameLoop {
             }
             this.playerMesh.userData.glowColor = playerColor;
 
+            // Update glow mesh + point light color to match
+            for (const child of this.playerMesh.children) {
+                if (child.isMesh && child.material && child.material.blending === THREE.AdditiveBlending) {
+                    child.material.color.copy(playerColor);
+                }
+                if (child.isLight) {
+                    child.color.copy(playerColor);
+                }
+            }
+            // Update shared glow state color
+            glowState.color = playerColor;
+
             // Update tail color to match
             const playerTail = getPlayerTail();
             if (playerTail) {
@@ -203,6 +222,14 @@ export class GameLoop {
             if (this._remotePlayerMeshes.has(data.entityId)) {
                 removeRemotePlayer(this.scene, data.entityId);
                 this._remotePlayerMeshes.delete(data.entityId);
+            }
+        });
+
+        // Reset local player tail on respawn (server clears tail_length + history)
+        eventBus.on('player:respawned', (data) => {
+            if (data.playerId === networkManager.localPlayerId) {
+                const tail = getPlayerTail();
+                if (tail) tail.reset();
             }
         });
     }
@@ -241,6 +268,14 @@ export class GameLoop {
             if (moveState.cameraRightTrigger) {
                 moveState.cameraRightTrigger = false;
                 stepOrbitRight();
+            }
+            if (moveState.mapToggleTrigger) {
+                moveState.mapToggleTrigger = false;
+                toggleRadarSize();
+            }
+            if (moveState.friendOutlineTrigger) {
+                moveState.friendOutlineTrigger = false;
+                this._friendOutlineActive = !this._friendOutlineActive;
             }
 
             // Network mode: send input, receive state from server
@@ -383,7 +418,7 @@ export class GameLoop {
         updateCameraOrbit(this.deltaTime);
 
         // Update camera
-        updateCameraFollow(this.camera, this.controls, this.playerMesh, this.cameraLookAtOffset);
+        updateCameraFollow(this.camera, this.controls, this.playerMesh, this.cameraLookAtOffset, this.deltaTime);
 
         // Update radar display
         this.updateRadar();
@@ -407,7 +442,6 @@ export class GameLoop {
         }
 
         // Emit player move event
-        const _playerEuler = new THREE.Euler();
         _playerEuler.setFromQuaternion(this.playerMesh.quaternion, 'YXZ');
         eventBus.emit('entity:move', {
             id: 'player',
@@ -437,7 +471,7 @@ export class GameLoop {
         const extra = nm.latestExtra;
 
         // 1. Send input to server every frame
-        if (!this.playerFrozen) {
+        if (!this.playerFrozen && !this._localWasDead) {
             const input = getNetworkInput(this.camera);
             nm.sendInput(input.dx, input.dz, input.flags, input.angle);
         }
@@ -451,6 +485,10 @@ export class GameLoop {
             if (!localAlive) {
                 this.playerMesh.visible = false;
                 this._localWasDead = true;
+                // Stop all prediction — player is dead, don't move
+                this._predicted.vx = 0;
+                this._predicted.vy = 0;
+                this._predicted.vz = 0;
             } else {
                 // Respawn: snap prediction to new position
                 if (this._localWasDead) {
@@ -463,8 +501,15 @@ export class GameLoop {
             const dt = this.deltaTime;
             const p = this._predicted;
 
+            // Skip all prediction and movement when dead
+            if (!localAlive) {
+                // Just snap mesh to server position (so death location is correct)
+                const so = (localState.scale - 1) * 0.5;
+                this.playerMesh.position.set(localState.x, localState.y + so, localState.z);
+            }
+
             // Initialize prediction from first server snapshot
-            if (!this._predictedInited) {
+            if (localAlive && !this._predictedInited) {
                 p.x = localState.x;
                 p.y = localState.y;
                 p.z = localState.z;
@@ -473,6 +518,9 @@ export class GameLoop {
                 p.vz = 0;
                 this._predictedInited = true;
             }
+
+            // All prediction/movement only when alive
+            if (localAlive) {
 
             // Process pending jumps from InputHandler
             while (pendingJumps.length > 0) {
@@ -483,9 +531,9 @@ export class GameLoop {
                     // Upward boost (same as single-player: JUMP_FORCE * 0.3)
                     p.vy += PLAYER_JUMP_FORCE * 0.3;
                     // Forward burst in facing direction (same as single-player: forward * 8)
-                    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.playerMesh.quaternion);
-                    p.vx += fwd.x * 8;
-                    p.vz += fwd.z * 8;
+                    _fwdVec.set(0, 0, 1).applyQuaternion(this.playerMesh.quaternion);
+                    p.vx += _fwdVec.x * 8;
+                    p.vz += _fwdVec.z * 8;
                 }
             }
 
@@ -563,8 +611,8 @@ export class GameLoop {
                     p.vy = 0;
                     this._correctionRemaining = 0;
                 } else if (errDist > 0.05) {
-                    // Spread correction over ~3 frames (~50ms) for smoothness
-                    const frames = 3;
+                    // Spread correction over ~6 frames (~100ms) for smoothness
+                    const frames = 6;
                     this._correctionDx = errX / frames;
                     this._correctionDy = errY / frames;
                     this._correctionDz = errZ / frames;
@@ -602,6 +650,8 @@ export class GameLoop {
             // Update targetPlayerQuaternion so _spawnFlipParticle uses correct orientation
             targetPlayerQuaternion.copy(targetQuat);
 
+            } // end if (localAlive) — prediction block
+
             // Invulnerability blinking (skip if dead — visibility already set above)
             if (localAlive) {
                 const invuln = (localState.flags & 0x02) !== 0;
@@ -624,6 +674,9 @@ export class GameLoop {
                     const { mesh } = createRemotePlayer(this.scene, entityId, name);
                     this._remotePlayerMeshes.set(entityId, mesh);
                 }
+                // Update bot flag every frame (so friend finder can filter)
+                const rmesh = this._remotePlayerMeshes.get(entityId);
+                if (rmesh) rmesh.userData.isBot = (state.flags & 0x08) !== 0;
                 const remoteTailLen = scoreInfo ? scoreInfo.tailLength : 0;
                 updateRemotePlayer(entityId, state, this.deltaTime, remoteTailLen);
             }
@@ -636,6 +689,9 @@ export class GameLoop {
                 this._remotePlayerMeshes.delete(entityId);
             }
         }
+
+        // Friend finder: screen-space indicators when F is toggled
+        drawFriendIndicators(this.camera, this._remotePlayerMeshes, this._friendOutlineActive);
 
         // 4. Update pickups from reliable stream events (with client-side gravity)
         this._lastDt = this.deltaTime;
@@ -680,12 +736,17 @@ export class GameLoop {
         updatePlayerGlow(this.playerMesh);
         syncPlayerGlowState(glowState);
 
-        // Update tail (uses visual position)
-        // Use minDistance to prevent history pollution when standing still —
-        // without this, stationary frames fill the buffer with identical positions
-        // and segments collapse to the player's feet.
+        // Update tail — clamp Y to ground minimum (matches RemotePlayer approach)
+        // so the tail doesn't float permanently, but still follows jump arcs naturally.
+        // Use minDistance to prevent history pollution when standing still.
         const localTail = getPlayerTail();
-        if (localTail) localTail.updatePositionHistory(this.playerMesh.position, 0.05);
+        if (localTail) {
+            const scOff = localState ? (localState.scale - 1) * 0.5 : 0;
+            const groundY = 0.5 + scOff;
+            const tailY = Math.max(this.playerMesh.position.y, groundY);
+            _tmpVec3.set(this.playerMesh.position.x, tailY, this.playerMesh.position.z);
+            localTail.updatePositionHistory(_tmpVec3, 0.05);
+        }
 
         // Sync local player tail segment count from server BEFORE positioning.
         // Rate-limit adds/removes to avoid visual oscillation when the server
@@ -703,17 +764,16 @@ export class GameLoop {
                     const segIdx = currentTailLen + i;
                     const histIdx = segIdx * playerTail.segmentSpacing;
                     const histPos = playerTail.getHistoryPosition(histIdx);
-                    let initPos;
                     if (histPos) {
-                        initPos = new THREE.Vector3(histPos.x, histPos.y, histPos.z);
+                        _initPos.set(histPos.x, histPos.y, histPos.z);
                     } else if (playerTail.segments.length > 0) {
                         // Place at last segment so it appears at the tail end
                         // instead of popping in at the player's head
-                        initPos = playerTail.segments[playerTail.segments.length - 1].mesh.position.clone();
+                        _initPos.copy(playerTail.segments[playerTail.segments.length - 1].mesh.position);
                     } else {
-                        initPos = this.playerMesh.position.clone();
+                        _initPos.copy(this.playerMesh.position);
                     }
-                    playerTail.addSegment(initPos);
+                    playerTail.addSegment(_initPos.clone());
                 }
             } else if (diff < 0) {
                 const toRemove = Math.min(-diff, MAX_TAIL_CHANGE_PER_FRAME);
@@ -737,9 +797,9 @@ export class GameLoop {
                 // Roll around the player's local right axis, composed with base yaw
                 const baseQuat = this._baseYawQuat || targetPlayerQuaternion;
                 const flipAngle = moveState.flipProgress * Math.PI * 2;
-                const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(baseQuat);
-                const flipQuat = new THREE.Quaternion().setFromAxisAngle(localRight, flipAngle);
-                this.playerMesh.quaternion.copy(flipQuat).multiply(baseQuat);
+                _flipRight.set(1, 0, 0).applyQuaternion(baseQuat);
+                _flipQuat.setFromAxisAngle(_flipRight, flipAngle);
+                this.playerMesh.quaternion.copy(_flipQuat).multiply(baseQuat);
 
                 // Spin tail segments with staggered delay
                 if (playerTail) {
@@ -791,7 +851,7 @@ export class GameLoop {
         updateLightPosition(camTarget.position);
         updateAutoFollow(this.deltaTime, playerVel, moveState.run > 0);
         updateCameraOrbit(this.deltaTime);
-        updateCameraFollow(this.camera, this.controls, camTarget, this.cameraLookAtOffset);
+        updateCameraFollow(this.camera, this.controls, camTarget, this.cameraLookAtOffset, this.deltaTime);
 
         // Radar (with remote players)
         this._updateNetworkRadar();

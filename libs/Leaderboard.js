@@ -2,9 +2,10 @@
  * @module Leaderboard
  * Persistent all-time leaderboard tracking multiple stats across sessions.
  * Categories: Biggest Size, Most Kills, Highest Coins, Longest Tail.
+ * In multiplayer: adds a "Live" tab showing real-time player rankings from snapshots.
  * Toggle with L key.
  */
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 
 const STORAGE_KEY = 'crawlr_records';
 const MAX_ENTRIES = 10;
@@ -24,6 +25,11 @@ const session = {
 
 // Callbacks for live stats
 let getStatsFn = null;
+
+// Network mode refs for live tab
+let networkManager = null;
+let isMultiplayer = false;
+let liveRefreshInterval = null;
 
 const TABS = [
     { key: 'size', label: 'Biggest', icon: '\u2b24', field: 'maxSize', format: v => v.toFixed(1) + 'x' },
@@ -53,6 +59,20 @@ export function initLeaderboard(getStats, name) {
  */
 export function setLeaderboardName(name) {
     playerName = name;
+}
+
+/**
+ * Enable the Live tab for multiplayer mode.
+ * @param {import('./network/NetworkManager.js').NetworkManager} nm
+ */
+export function setLeaderboardNetworkManager(nm) {
+    networkManager = nm;
+    isMultiplayer = true;
+    activeTab = 'live';
+
+    // Unhide the live tab button
+    const liveBtn = overlay?.querySelector('[data-tab="live"]');
+    if (liveBtn) liveBtn.style.display = '';
 }
 
 function setupEventListeners() {
@@ -137,7 +157,7 @@ function createOverlay() {
     overlay.style.cssText = 'position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.7);';
 
     const box = document.createElement('div');
-    box.style.cssText = 'background:rgba(20,20,30,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:12px; padding:24px 32px; min-width:300px; max-width:360px; font-family:monospace; color:#fff;';
+    box.style.cssText = 'background:rgba(20,20,30,0.95); border:1px solid rgba(255,255,255,0.15); border-radius:12px; padding:24px 32px; min-width:300px; max-width:400px; font-family:monospace; color:#fff;';
 
     const title = document.createElement('div');
     title.textContent = 'Leaderboard';
@@ -148,6 +168,18 @@ function createOverlay() {
     const tabBar = document.createElement('div');
     tabBar.style.cssText = 'display:flex; gap:4px; margin-bottom:16px;';
     tabBar.id = 'lb-tabs';
+
+    // Live tab (hidden until multiplayer is activated)
+    const liveBtn = document.createElement('button');
+    liveBtn.textContent = '\u25b6 Live';
+    liveBtn.dataset.tab = 'live';
+    liveBtn.style.cssText = 'flex:1; padding:6px 4px; border:none; border-radius:6px; font:11px monospace; cursor:pointer; transition:background 0.2s, color 0.2s; display:none;';
+    liveBtn.addEventListener('click', () => {
+        activeTab = 'live';
+        renderContent();
+        updateTabStyles(tabBar);
+    });
+    tabBar.appendChild(liveBtn);
 
     for (const tab of TABS) {
         const btn = document.createElement('button');
@@ -176,16 +208,27 @@ function createOverlay() {
     document.body.appendChild(overlay);
 
     overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) overlay.style.display = 'none';
+        if (e.target === overlay) hideOverlay();
     });
 
     window.addEventListener('keydown', (e) => {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         if (e.key.toLowerCase() === 'l') {
             toggleLeaderboard();
         } else if (e.key === 'Escape' && overlay.style.display === 'flex') {
-            overlay.style.display = 'none';
+            hideOverlay();
         }
     });
+}
+
+function hideOverlay() {
+    if (!overlay) return;
+    overlay.style.display = 'none';
+    if (liveRefreshInterval) {
+        clearInterval(liveRefreshInterval);
+        liveRefreshInterval = null;
+    }
 }
 
 function updateTabStyles(tabBar) {
@@ -198,6 +241,26 @@ function updateTabStyles(tabBar) {
 
 function renderContent() {
     if (!contentEl) return;
+
+    // Stop live refresh if switching away
+    if (activeTab !== 'live' && liveRefreshInterval) {
+        clearInterval(liveRefreshInterval);
+        liveRefreshInterval = null;
+    }
+
+    if (activeTab === 'live') {
+        renderLiveContent();
+        // Auto-refresh while visible
+        if (!liveRefreshInterval) {
+            liveRefreshInterval = setInterval(() => {
+                if (overlay && overlay.style.display === 'flex' && activeTab === 'live') {
+                    renderLiveContent();
+                }
+            }, 500);
+        }
+        return;
+    }
+
     const tab = TABS.find(t => t.key === activeTab);
     if (!tab) return;
 
@@ -272,6 +335,85 @@ function renderContent() {
     }
 }
 
+function renderLiveContent() {
+    if (!contentEl || !networkManager) return;
+
+    const extra = networkManager.latestExtra;
+    const scores = extra.scores || [];
+    const localId = networkManager.localPlayerId;
+
+    // Sort by score descending
+    const sorted = [...scores].sort((a, b) => b.score - a.score);
+
+    contentEl.innerHTML = '';
+
+    if (sorted.length === 0) {
+        const empty = document.createElement('div');
+        empty.textContent = 'Waiting for players...';
+        empty.style.cssText = 'color:rgba(255,255,255,0.3); font-size:11px; text-align:center; padding:12px 0;';
+        contentEl.appendChild(empty);
+        return;
+    }
+
+    // Header row
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex; align-items:center; gap:6px; padding:2px 8px; margin-bottom:6px; font-size:10px; color:rgba(255,255,255,0.35);';
+    header.innerHTML = '<span style="width:24px"></span><span style="flex:1">Name</span><span style="min-width:36px;text-align:right">Score</span><span style="min-width:28px;text-align:right">Tail</span><span style="min-width:32px;text-align:right">Size</span>';
+    contentEl.appendChild(header);
+
+    for (let i = 0; i < sorted.length; i++) {
+        const s = sorted[i];
+        const isLocal = s.playerId === localId;
+
+        // Get entity scale from remoteEntities (or local state)
+        const entity = networkManager.remoteEntities.get(s.playerId);
+        const scale = entity ? entity.scale : 1;
+
+        // Deterministic color (same formula as RemotePlayer)
+        const hue = (s.playerId * 137.508) % 360;
+        const color = `hsl(${Math.round(hue)}, 70%, 55%)`;
+
+        const row = document.createElement('div');
+        const bg = isLocal ? 'background:rgba(0,255,204,0.12);' : '';
+        row.style.cssText = `display:flex; align-items:center; gap:6px; padding:3px 8px; margin-bottom:2px; border-radius:4px; font-size:12px; ${bg}`;
+
+        // Medal / rank
+        let rankText = `#${i + 1}`;
+        let rankColor = 'rgba(255,255,255,0.4)';
+        if (i === 0) { rankText = '\ud83e\udd47'; rankColor = '#ffd700'; }
+        else if (i === 1) { rankText = '\ud83e\udd48'; rankColor = '#c0c0c0'; }
+        else if (i === 2) { rankText = '\ud83e\udd49'; rankColor = '#cd7f32'; }
+
+        const rankEl = document.createElement('span');
+        rankEl.textContent = rankText;
+        rankEl.style.cssText = `color:${rankColor}; width:24px; text-align:center; font-size:${i < 3 ? '14px' : '10px'};`;
+
+        const nameEl = document.createElement('span');
+        nameEl.textContent = s.displayName || `Player`;
+        const nameColor = isLocal ? '#00ffcc' : 'rgba(255,255,255,0.85)';
+        nameEl.style.cssText = `color:${nameColor}; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;`;
+
+        const scoreEl = document.createElement('span');
+        scoreEl.textContent = String(s.score);
+        scoreEl.style.cssText = 'color:#fff; font-weight:bold; min-width:36px; text-align:right;';
+
+        const tailEl = document.createElement('span');
+        tailEl.textContent = String(s.tailLength);
+        tailEl.style.cssText = 'color:rgba(255,255,255,0.5); min-width:28px; text-align:right; font-size:11px;';
+
+        const sizeEl = document.createElement('span');
+        sizeEl.textContent = scale.toFixed(1) + 'x';
+        sizeEl.style.cssText = 'color:rgba(255,255,255,0.5); min-width:32px; text-align:right; font-size:11px;';
+
+        row.appendChild(rankEl);
+        row.appendChild(nameEl);
+        row.appendChild(scoreEl);
+        row.appendChild(tailEl);
+        row.appendChild(sizeEl);
+        contentEl.appendChild(row);
+    }
+}
+
 function toggleLeaderboard() {
     if (!overlay) return;
     const visible = overlay.style.display === 'flex';
@@ -279,6 +421,9 @@ function toggleLeaderboard() {
         renderContent();
         const tabBar = overlay.querySelector('#lb-tabs');
         if (tabBar) updateTabStyles(tabBar);
+    } else {
+        hideOverlay();
+        return;
     }
-    overlay.style.display = visible ? 'none' : 'flex';
+    overlay.style.display = 'flex';
 }

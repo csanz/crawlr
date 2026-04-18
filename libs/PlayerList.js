@@ -35,10 +35,11 @@ function pickName() {
  */
 export function initPlayerList() {
     container = document.createElement('div');
+    container.id = 'player-list';
     container.style.cssText = [
         'position:absolute',
         'top:60px',
-        'left:10px',
+        'right:10px',
         'z-index:100',
         'pointer-events:none',
         'user-select:none',

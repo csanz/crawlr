@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d';
 import { moveState } from './InputHandler.js';
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import {
     PLAYER_SPEED,
     PLAYER_RUN_MULTIPLIER,
@@ -214,7 +214,7 @@ export function createPlayer(scene, world, renderer) {
 
     // Physics body
     const playerBody = world.createRigidBody(
-        RAPIER.RigidBodyDesc.dynamic().setTranslation(0.0, 1.0, 0.0)
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(0.0, 20.0, 0.0)
     );
     const collider = world.createCollider(
         RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5)

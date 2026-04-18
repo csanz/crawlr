@@ -4,7 +4,7 @@
  * in the game loop with a single unified interface.
  */
 import * as THREE from 'three';
-import { eventBus } from '../EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 
 export class PickupManager {
     constructor(scene, world) {

@@ -5,7 +5,7 @@
  */
 import { moveState } from './InputHandler.js';
 import { SPRINT_BURN_INTERVAL } from './PhysicsConfig.js';
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 
 let burnTimer = 0;
 

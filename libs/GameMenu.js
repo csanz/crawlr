@@ -236,10 +236,24 @@ function refreshPlayerList() {
 }
 
 function leaveGame() {
+    // Disconnect from the server so other players see "left the game"
+    if (window.__networkManager) {
+        window.__networkManager.disconnect();
+    }
+
+    // Navigate back to the portal lobby page
+    const params = new URLSearchParams(window.location.search);
+    const returnUrl = params.get('returnUrl');
+    if (returnUrl) {
+        window.location.href = returnUrl;
+        return;
+    }
+
+    // Fallback: construct portal origin and go to home
     const portalOrigin = window.location.port === '3000'
         ? window.location.origin
         : `${window.location.protocol}//${window.location.hostname}:3000`;
-    window.location.href = `${portalOrigin}/lobby`;
+    window.location.href = portalOrigin;
 }
 
 /** Returns true if the menu is currently open */

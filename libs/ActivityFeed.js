@@ -3,7 +3,7 @@
  * Rolling event log in the bottom-left corner showing kills, ring events,
  * lightning strikes, weather changes, and crown changes.
  */
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { getEntityName } from './PlayerList.js';
 
 const MAX_ITEMS = 6;
@@ -12,6 +12,7 @@ let container = null;
 const EVENT_CONFIG = {
     'entity:died':       { icon: '\u{1F480}', color: '#ff4444' },
     'entity:joined':     { icon: '\u{1F40D}', color: '#00ffcc' },
+    'entity:left':       { icon: '\u{1F44B}', color: '#ff8844' },
     'entity:sizeChanged':{ icon: '\u{1F4AA}', color: '#44ff88' },
     'ring:jumped':       { icon: '\u25CB',    color: '#00ffff' },
     'ring:hit':          { icon: '\u25B3',    color: '#ffaa00' },
@@ -48,6 +49,10 @@ function formatMessage(event, data) {
         case 'entity:joined': {
             const name = data.name || getEntityName(data.entityId);
             return { text: `${name} joined the game`, bright: isPlayer(data.entityId) };
+        }
+        case 'entity:left': {
+            const name = getEntityName(data.entityId);
+            return { text: `${name} left the game`, bright: false };
         }
         case 'entity:sizeChanged': {
             // Only show milestone sizes (reaching 2x, 3x, 4x…)

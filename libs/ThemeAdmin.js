@@ -3,7 +3,7 @@
  * Dev overlay for testing themes. Toggle with backtick (`).
  * Shows registered themes with Start/Stop buttons.
  */
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { StormTheme } from './themes/StormTheme.js';
 import { toggleAmbientMute, isAmbientMuted, toggleMute, isMuted } from './Sound.js';
 

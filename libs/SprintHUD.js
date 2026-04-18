@@ -27,6 +27,7 @@ const LEVEL_UP_DURATION = 1.5; // seconds
  */
 export function initSprintHUD() {
     canvas = document.createElement('canvas');
+    canvas.id = 'sprint-hud';
     canvas.width = WIDTH;
     canvas.height = HEIGHT;
     canvas.style.cssText = 'position:absolute; top:10px; right:10px; z-index:100; pointer-events:none;';

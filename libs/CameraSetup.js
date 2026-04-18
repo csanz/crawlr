@@ -5,8 +5,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// Pre-allocated vector to avoid per-frame allocation
+// Pre-allocated vectors to avoid per-frame allocation
 const _cameraTargetLookAt = new THREE.Vector3();
+const _cameraTargetRaw = new THREE.Vector3();
+const _camSnapDir = new THREE.Vector3();
+
+/** Camera follow smoothing — higher = more responsive, lower = smoother */
+const CAMERA_FOLLOW_SPEED = 18;
 
 /** Camera orbit — step-based rotation with smooth interpolation */
 const ORBIT_STEP = Math.PI / 4; // 45 degrees per press
@@ -227,9 +232,17 @@ export function updateAutoFollow(dt, velocity, sprinting) {
  * @param {OrbitControls} controls
  * @param {THREE.Mesh} playerMesh
  * @param {THREE.Vector3} cameraLookAtOffset
+ * @param {number} [dt] - deltaTime for smooth follow (omit for instant follow)
  */
-export function updateCameraFollow(camera, controls, playerMesh, cameraLookAtOffset) {
-    _cameraTargetLookAt.copy(playerMesh.position).add(cameraLookAtOffset);
+export function updateCameraFollow(camera, controls, playerMesh, cameraLookAtOffset, dt) {
+    _cameraTargetRaw.copy(playerMesh.position).add(cameraLookAtOffset);
+    if (dt && dt > 0) {
+        // Smooth follow: lerp toward target position
+        const t = Math.min(1, CAMERA_FOLLOW_SPEED * dt);
+        _cameraTargetLookAt.lerp(_cameraTargetRaw, t);
+    } else {
+        _cameraTargetLookAt.copy(_cameraTargetRaw);
+    }
 
     const zoom = ZOOM_LEVELS[currentZoomLevel];
     const angle = ANGLE_LEVELS[currentAngleLevel];
@@ -245,8 +258,8 @@ export function updateCameraFollow(camera, controls, playerMesh, cameraLookAtOff
         const dist = camera.position.distanceTo(_cameraTargetLookAt);
         if (dist < zoom.min || dist > zoom.max) {
             const targetDist = (zoom.min + zoom.max) / 2;
-            const dir = camera.position.clone().sub(_cameraTargetLookAt).normalize();
-            camera.position.copy(_cameraTargetLookAt).addScaledVector(dir, targetDist);
+            _camSnapDir.copy(camera.position).sub(_cameraTargetLookAt).normalize();
+            camera.position.copy(_cameraTargetLookAt).addScaledVector(_camSnapDir, targetDist);
         }
     }
 

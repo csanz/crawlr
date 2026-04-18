@@ -10,7 +10,7 @@ import { BasePickup } from './BasePickup.js';
 import { playEffect } from '../Sound.js';
 import { addTailSegment, getTailLength } from '../Tail.js';
 import { growPlayer } from '../Player.js';
-import { eventBus } from '../EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import {
     WATERDROP_RADIUS, WATERDROP_COLOR,
     COIN_SPAWN_AREA_XZ

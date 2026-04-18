@@ -17,4 +17,28 @@ canvas {
         user-select: none;
         -webkit-touch-callout: none;
     }
+
+    /* Hide player list on mobile — overlaps touch buttons */
+    #player-list {
+        display: none !important;
+    }
+
+    /* Shrink radar on small screens */
+    #radar {
+        width: 100px !important;
+        height: 100px !important;
+        bottom: 170px !important;
+    }
+
+    /* Move sprint bar to top-left on mobile — right side has touch buttons */
+    #sprint-hud {
+        right: auto !important;
+        left: 10px !important;
+    }
+
+    /* Shrink chat on mobile */
+    #chat-ui {
+        width: 200px !important;
+        max-height: 160px !important;
+    }
 } 

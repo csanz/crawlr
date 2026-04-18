@@ -9,7 +9,7 @@
  *   postMessage delay: 0 = immediately when theme ends, positive = seconds after
  */
 import * as THREE from 'three';
-import { eventBus } from '../EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { createLogger } from '../Logger.js';
 
 const log = createLogger('ThemeManager');

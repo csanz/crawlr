@@ -6,6 +6,7 @@
 
 let el = null;
 let flashEl = null;
+let roundStartEl = null;
 let lastDisplay = '';
 let flashShown = false;
 
@@ -47,6 +48,24 @@ export function initRoundHUD() {
     ].join(';');
     flashEl.textContent = 'FINAL 30 SECONDS!';
     document.body.appendChild(flashEl);
+
+    // Round start announcement
+    roundStartEl = document.createElement('div');
+    roundStartEl.style.cssText = [
+        'position:absolute',
+        'top:40%',
+        'left:50%',
+        'transform:translate(-50%,-50%)',
+        'z-index:200',
+        'font:bold 48px monospace',
+        'color:#fff',
+        'text-shadow:0 0 20px rgba(100,200,255,0.8), 0 4px 12px rgba(0,0,0,0.5)',
+        'pointer-events:none',
+        'user-select:none',
+        'opacity:0',
+        'transition:opacity 0.4s, transform 0.4s',
+    ].join(';');
+    document.body.appendChild(roundStartEl);
 }
 
 /**
@@ -104,4 +123,22 @@ export function showRoundHUD() {
     if (flashEl) flashEl.style.display = '';
     flashShown = false;
     lastDisplay = '';
+}
+
+/**
+ * Show a "Round N" announcement that fades out after a few seconds.
+ * @param {number} roundNumber
+ */
+export function showRoundStart(roundNumber) {
+    if (!roundStartEl) return;
+    roundStartEl.textContent = roundNumber <= 1 ? 'GO!' : `Round ${roundNumber}`;
+    roundStartEl.style.opacity = '1';
+    roundStartEl.style.transform = 'translate(-50%,-50%) scale(1)';
+
+    setTimeout(() => {
+        if (roundStartEl) {
+            roundStartEl.style.opacity = '0';
+            roundStartEl.style.transform = 'translate(-50%,-50%) scale(1.2)';
+        }
+    }, 2000);
 }

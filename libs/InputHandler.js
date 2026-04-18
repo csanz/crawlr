@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d';
 import { PLAYER_JUMP_FORCE } from './PhysicsConfig.js';
 import { playEffect } from './Sound.js';
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 
 /** Queue of jump events for network prediction to consume */
 export const pendingJumps = [];
@@ -93,6 +93,10 @@ export function initInputHandler(playerBody, playerMesh) {
     _playerMesh = playerMesh;
     _playerBody = playerBody;
     window.addEventListener('keydown', (event) => {
+        // Skip game input when typing in a text field (chat, etc.)
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
         switch (event.key.toLowerCase()) {
             case 'w':
                 moveState.forward = 1;
@@ -164,6 +168,10 @@ export function initInputHandler(playerBody, playerMesh) {
     });
 
     window.addEventListener('keyup', (event) => {
+        // Skip game input when typing in a text field (chat, etc.)
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
         switch (event.key.toLowerCase()) {
             case 'w':
                 moveState.forward = 0;

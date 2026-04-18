@@ -79,6 +79,8 @@ export function initKeyboardHelp() {
 
     // Listen for ? key to toggle, Escape to close
     window.addEventListener('keydown', (e) => {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         if (e.key === '?') {
             toggleHelp();
         } else if (e.key === 'Escape' && overlay.style.display === 'flex') {

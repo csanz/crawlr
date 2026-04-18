@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three';
 import { playSound, playSpatialSound, playSpatialEffect, fadeOutAmbiance, fadeInAmbiance, suppressAmbiance, unsuppressAmbiance } from '../Sound.js';
-import { eventBus } from '../EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 
 const RAIN_COUNT = 500;
 const RAIN_SPEED = 25;

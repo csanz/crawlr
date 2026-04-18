@@ -10,7 +10,7 @@ import { setupCamera, setupOrbitControls } from './libs/CameraSetup.js';
 import { initSprintHUD } from './libs/SprintHUD.js';
 import { initScoreHUD } from './libs/ScoreHUD.js';
 import { initKeyboardHelp } from './libs/KeyboardHelp.js';
-import { initLeaderboard, updateLeaderboardStats } from './libs/Leaderboard.js';
+import { initLeaderboard, updateLeaderboardStats, setLeaderboardNetworkManager } from './libs/Leaderboard.js';
 import { initInputHandler } from './libs/InputHandler.js';
 import { createPlayer } from './libs/Player.js';
 import { createPushableBlock } from './libs/PushableBlock.js';
@@ -19,8 +19,8 @@ import { setupRenderer } from './libs/RendererSetup.js';
 import { createGround } from './libs/Ground.js';
 import { createBorderMountains } from './libs/BorderMountains.js';
 import { createBoulders } from './libs/Boulders.js';
-import { GRAVITY, BOT_COUNT, COIN_SPAWN_AREA_XZ, SERVER_URL } from './libs/PhysicsConfig.js';
-import { NetworkManager } from './libs/network/NetworkManager.js';
+import { GRAVITY, BOT_COUNT, COIN_SPAWN_AREA_XZ, SERVER_URL, ADMIN_API_URL } from './libs/PhysicsConfig.js';
+import { CrawlrNet } from './libs/CrawlrNet.js';
 import { addNameLabel } from './libs/NameLabels.js';
 import { initSoundSystem, playSnippet, playSound } from './libs/Sound.js';
 import { initTailSystem, getPlayerTail } from './libs/Tail.js';
@@ -29,7 +29,7 @@ import { CollisionHandler } from './libs/CollisionHandler.js';
 import { GameLoop } from './libs/GameLoop.js';
 import { DeathManager } from './libs/DeathManager.js';
 import { BotManager } from './libs/BotManager.js';
-import { eventBus } from './libs/EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { initPlayerList, setPlayerName, registerBot, getEntityName } from './libs/PlayerList.js';
 import { showStartScreen } from './libs/StartScreen.js';
 import { showDeathScreen } from './libs/DeathScreen.js';
@@ -42,11 +42,13 @@ import { initPowerUpHUD } from './libs/PowerUpHUD.js';
 import { loadMap } from './libs/MapLoader.js';
 import { createClouds, updateClouds } from './libs/Clouds.js';
 import { RoundManager } from './libs/RoundManager.js';
-import { initRoundHUD, hideRoundHUD, showRoundHUD } from './libs/RoundHUD.js';
+import { initRoundHUD, hideRoundHUD, showRoundHUD, showRoundStart } from './libs/RoundHUD.js';
 import { showPodiumScreen } from './libs/PodiumScreen.js';
 import { initActivityFeed } from './libs/ActivityFeed.js';
 import { initTouchControls } from './libs/TouchControls.js';
 import { initGameMenu } from './libs/GameMenu.js';
+import { initChatUI } from './libs/ChatUI.js';
+import { NetDebug } from '@jazaix/jx-sdk';
 
 const log = createLogger('App');
 
@@ -78,11 +80,23 @@ window.statsEnabled = false;
 stats.dom.style.display = 'none';
 
 window.addEventListener('keydown', (event) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (event.key.toLowerCase() === 'p') {
         window.statsEnabled = !window.statsEnabled;
         stats.dom.style.display = window.statsEnabled ? 'block' : 'none';
     }
+    if (event.key === 'N' && event.shiftKey) {
+        window.__netDebug?.toggle();
+    }
 });
+
+// --- Network debug overlay (Shift+N or ?debug=perf) ---
+const _netDebug = new NetDebug();
+window.__netDebug = _netDebug;
+if (new URLSearchParams(window.location.search).get('debug') === 'perf') {
+    _netDebug.show();
+}
 
 // --- HUD ---
 initSprintHUD();
@@ -102,7 +116,12 @@ scene.add(directionalLight.target);
 
 // If multiplayer mode requested without a room, redirect to lobby
 const _urlParams = new URLSearchParams(window.location.search);
-if (_urlParams.get('mode') === 'multiplayer' && !_urlParams.get('room')) {
+const _isSpectator = _urlParams.get('mode') === 'spectator';
+
+if (_isSpectator) {
+    // Spectator/peek mode — no start screen, no player name needed
+    startSpectatorMode();
+} else if (_urlParams.get('mode') === 'multiplayer' && !_urlParams.get('room')) {
     window.location.href = '/lobby.html';
 } else {
     // If name is provided via URL (from portal), skip the start screen entirely
@@ -122,6 +141,139 @@ if (_urlParams.get('mode') === 'multiplayer' && !_urlParams.get('room')) {
             startGame(playerName);
         }
     });
+}
+
+/**
+ * Spectator/peek mode: connects as an observer (no entity, no input).
+ * Renders the live game and allows camera follow + free-fly.
+ * Communicates with the parent window (portal PeekModal) via postMessage.
+ */
+async function startSpectatorMode() {
+    log.info('Starting spectator/peek mode...');
+
+    const params = new URLSearchParams(window.location.search);
+    const room = params.get('room') || 'default';
+    const token = params.get('token') || '';
+
+    // Show connecting overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'connecting-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-family:monospace;';
+    overlay.textContent = 'Connecting as spectator...';
+    document.body.appendChild(overlay);
+
+    // Connect as observer (spectator mode — no entity created, no player count)
+    const networkManager = new CrawlrNet(SERVER_URL);
+    // Game key is auto-loaded from jx.config.js → window.__JX_CONFIG__ → SDK.
+    // The typeof guard handles cases where SDK script hasn't loaded yet.
+    const gameKey = (typeof JxSDK !== 'undefined' && JxSDK.getGameKey) ? JxSDK.getGameKey() || '' : '';
+    const connected = await networkManager.connectAsObserver(room, token, gameKey);
+
+    if (!connected) {
+        overlay.innerHTML = `<div style="text-align:center;"><div>Failed to connect</div><div style="font-size:14px;color:#aaa;margin-top:8px;">${networkManager.lastError || ''}</div></div>`;
+        return;
+    }
+    overlay.remove();
+
+    // Attach network debug overlay
+    _netDebug.setNetworkManager(networkManager);
+
+    // Load Rapier for visual scene setup (no physics stepping)
+    const RAPIER = await import('@dimforge/rapier3d');
+    const world = new RAPIER.World(GRAVITY);
+    const eventQueue = new RAPIER.EventQueue(true);
+
+    // Initialize sound on first interaction
+    const startSound = () => { initSoundSystem(); };
+    document.addEventListener('click', startSound, { once: true });
+    document.addEventListener('keydown', startSound, { once: true });
+
+    // Load map and create environment
+    const mapData = await loadMap('/maps/default.json');
+    createGround(scene, world, renderer);
+    createBorderMountains(scene, world, mapData);
+    createBoulders(scene, world, mapData ? mapData.boulders : null);
+    createClouds(scene);
+    DefaultTheme.apply(scene);
+
+    // No local player mesh, no input handler, no touch controls
+    // Minimal pickup manager for rendering server pickups
+    const pickupManager = new PickupManager(scene, world);
+    const coinPickup = new CoinPickup(scene, world);
+    pickupManager.register(coinPickup);
+    const collisionHandler = new CollisionHandler(world, pickupManager);
+    const deathManager = new DeathManager(scene, world, pickupManager);
+
+    // Dummy player mesh (invisible — needed by GameLoop but observer has no player)
+    const { playerMesh, playerBody } = createPlayer(scene, world, renderer);
+    playerMesh.visible = false;
+    const { blockMesh, blockBody } = createPushableBlock(scene, world, renderer);
+
+    // Storm theme for visual weather
+    StormTheme.setDeathManager(deathManager);
+    StormTheme.setPlayerMesh(playerMesh);
+    StormTheme._networkMode = true;
+
+    // Fetch game settings to check if free-fly is allowed
+    let allowFreeFly = true;
+    try {
+        const gameSlug = params.get('game') || 'crawlr';
+        const settingsRes = await fetch(`${ADMIN_API_URL}/api/games/${gameSlug}/settings`);
+        if (settingsRes.ok) {
+            const settings = await settingsRes.json();
+            if (settings?.general?.allow_spectator_free_fly === false) {
+                allowFreeFly = false;
+            }
+        }
+    } catch { /* use default (true) */ }
+
+    // Spectator mode with peek options
+    const spectatorMode = new SpectatorMode({
+        getEntityName,
+        isPeekMode: true,
+        allowFreeFly,
+        onRequestJoin: () => {
+            // Tell parent to join this server
+            if (window.parent !== window) {
+                window.parent.postMessage({ type: 'peek:join' }, '*');
+            }
+        },
+        onRequestClose: () => {
+            networkManager.disconnect();
+            if (window.parent !== window) {
+                window.parent.postMessage({ type: 'peek:close' }, '*');
+            }
+        },
+    });
+
+    // Configure game loop in network mode
+    const gameLoop = new GameLoop(scene, world, eventQueue, renderer, camera, controls);
+    gameLoop.setup(playerMesh, playerBody, blockMesh, blockBody, pickupManager, collisionHandler, stats, null, deathManager);
+    gameLoop.setNetworkMode(networkManager);
+    gameLoop.playerFrozen = true; // No local player to control
+
+    // Share remote meshes with storm theme
+    StormTheme.setRemotePlayerMeshes(gameLoop._remotePlayerMeshes);
+
+    // Start spectator mode immediately — follows remote players
+    spectatorMode.start(gameLoop._remotePlayerMeshes);
+    gameLoop.spectatorTarget = spectatorMode;
+
+    gameLoop.start();
+    log.info('Spectator game loop started');
+
+    // postMessage bridge with parent (portal PeekModal)
+    if (window.parent !== window) {
+        window.parent.postMessage({ type: 'peek:ready' }, '*');
+
+        window.addEventListener('message', (e) => {
+            if (!e.data || typeof e.data.type !== 'string') return;
+            if (e.data.type === 'peek:close') {
+                networkManager.disconnect();
+                spectatorMode.stop();
+            }
+        });
+    }
 }
 
 async function startGame(playerName) {
@@ -340,6 +492,7 @@ async function startGame(playerName) {
         // Start next round
         roundManager.start();
         gameLoop.playerFrozen = false;
+        showRoundStart(roundManager.roundNumber);
     });
 
     // Admin: test podium with current standings
@@ -357,6 +510,7 @@ async function startGame(playerName) {
 
     // Start the first round
     roundManager.start();
+    showRoundStart(1);
 
     gameLoop.start();
     log.info('Game loop started');
@@ -382,9 +536,13 @@ async function startMultiplayerGame(playerName) {
     document.body.appendChild(overlay);
 
     // Connect to server
-    const networkManager = new NetworkManager(SERVER_URL);
-    const room = new URLSearchParams(window.location.search).get('room') || 'default';
-    const connected = await networkManager.connect(playerName, room);
+    const networkManager = new CrawlrNet(SERVER_URL);
+    const params = new URLSearchParams(window.location.search);
+    const room = params.get('room') || 'default';
+    const token = params.get('token') || '';
+    // Game key auto-loaded from jx.config.js via SDK (see index.html load order)
+    const gameKey = (typeof JxSDK !== 'undefined' && JxSDK.getGameKey) ? JxSDK.getGameKey() || '' : '';
+    const connected = await networkManager.connect(playerName, room, token, gameKey);
 
     if (!connected) {
         const reason = networkManager.lastError || 'Unknown error';
@@ -403,6 +561,12 @@ async function startMultiplayerGame(playerName) {
     }
 
     overlay.remove();
+
+    // Attach network debug overlay
+    _netDebug.setNetworkManager(networkManager);
+
+    // Initialize chat UI for multiplayer
+    initChatUI(networkManager);
 
     // Load Rapier just for creating a minimal world (we need it for createGround/etc visual setup)
     // In network mode, physics won't step — just visuals.
@@ -468,6 +632,7 @@ async function startMultiplayerGame(playerName) {
         tailLength: playerTail ? playerTail.getLength() : 0,
         size: playerMesh.scale.x
     }), playerName);
+    setLeaderboardNetworkManager(networkManager);
 
     // Spectator mode instance
     const spectatorMode = new SpectatorMode({
@@ -547,6 +712,7 @@ async function startMultiplayerGame(playerName) {
 
         showRoundHUD();
         gameLoop.playerFrozen = false;
+        showRoundStart(payload.roundNumber + 1);
     });
 
     // Clouds and lighting still update

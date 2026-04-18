@@ -9,7 +9,7 @@ import { BasePickup } from './BasePickup.js';
 import { playCoinCollect } from '../Sound.js';
 import { addTailSegment, getTailLength } from '../Tail.js';
 import { growPlayer } from '../Player.js';
-import { eventBus } from '../EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import {
     MAX_COINS, COIN_DROP_HEIGHT, COIN_SPAWN_AREA_XZ,
     COIN_RADIUS, COIN_COLOR

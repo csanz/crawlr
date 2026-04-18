@@ -3,7 +3,7 @@
  * Shows a brief warning flash when hitting a ring obstacle.
  * Kept minimal — just a fading "RING HIT! -X STAMINA" text.
  */
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 
 let container = null;
 let fadeTimer = 0;

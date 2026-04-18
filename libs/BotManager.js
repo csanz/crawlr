@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d';
 import { SnakeTail, getPlayerTail } from './Tail.js';
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { addEyes, computeGrowth } from './Player.js';
 import {
     PLAYER_SPEED,

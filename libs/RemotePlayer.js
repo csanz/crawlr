@@ -11,6 +11,15 @@ import { SnakeTail } from './Tail.js';
 import { playSpatialEffect } from './Sound.js';
 
 const remotePlayers = new Map(); // entityId -> { mesh, color, tail, lastTailLength, ... }
+const _tailPos = new THREE.Vector3(); // reusable vec for tail position clamping
+
+// Pre-allocated reusable objects to avoid per-frame GC pressure
+const _rTargetQuat = new THREE.Quaternion();
+const _rYAxis = new THREE.Vector3(0, 1, 0);
+const _rLocalRight = new THREE.Vector3();
+const _rFlipQuat = new THREE.Quaternion();
+const _rScaleVec = new THREE.Vector3();
+const _rGlowColor = new THREE.Color();
 
 // Shared geometry for all remote players
 let _sharedGeo = null;
@@ -69,14 +78,28 @@ export function createRemotePlayer(scene, entityId, displayName) {
     addEyes(mesh);
     addNameLabel(mesh, displayName || `Player ${entityId}`);
 
+    // Glow mesh (additive blending sphere — no PointLight for perf)
+    const glowMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.8, 12, 12),
+        new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        })
+    );
+    mesh.add(glowMesh);
+
     scene.add(mesh);
 
     // Create tail (no physics world for remote players)
-    // Use tighter segment spacing for network mode (server ticks at 20Hz, so history is sparser)
     const tail = new SnakeTail(scene, null, mesh, color, `remote-${entityId}`);
-    tail.segmentSpacing = 2;
+    tail.segmentSpacing = 8;
     remotePlayers.set(entityId, {
         mesh, color, tail, lastTailLength: 0,
+        glowMesh,
         // Action detection state
         wasOnGround: true, prevServerFlipping: false, sprinting: false,
         // Flip animation state
@@ -168,11 +191,8 @@ export function updateRemotePlayer(entityId, state, dt, tailLength = 0) {
     }
 
     // Rotation from angle — save base yaw for flip composition
-    const targetQuat = new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        state.angle
-    );
-    remote.baseYawQuat.copy(targetQuat);
+    _rTargetQuat.setFromAxisAngle(_rYAxis, state.angle);
+    remote.baseYawQuat.copy(_rTargetQuat);
 
     // --- Flip animation (matches single-player exactly) ---
     if (remote.flipping) {
@@ -180,7 +200,7 @@ export function updateRemotePlayer(entityId, state, dt, tailLength = 0) {
         if (remote.flipProgress >= 1) {
             remote.flipping = false;
             remote.flipProgress = 0;
-            mesh.quaternion.slerp(targetQuat, 0.15);
+            mesh.quaternion.slerp(_rTargetQuat, 0.15);
             // Clear tail flip rotations
             if (tail) {
                 for (const seg of tail.segments) seg.mesh.rotation.x = 0;
@@ -188,9 +208,9 @@ export function updateRemotePlayer(entityId, state, dt, tailLength = 0) {
         } else {
             // Roll around the local right axis, composed with base yaw
             const flipAngle = remote.flipProgress * Math.PI * 2;
-            const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(remote.baseYawQuat);
-            const flipQuat = new THREE.Quaternion().setFromAxisAngle(localRight, flipAngle);
-            mesh.quaternion.copy(flipQuat).multiply(remote.baseYawQuat);
+            _rLocalRight.set(1, 0, 0).applyQuaternion(remote.baseYawQuat);
+            _rFlipQuat.setFromAxisAngle(_rLocalRight, flipAngle);
+            mesh.quaternion.copy(_rFlipQuat).multiply(remote.baseYawQuat);
 
             // Spin tail segments with staggered delay
             if (tail) {
@@ -203,12 +223,13 @@ export function updateRemotePlayer(entityId, state, dt, tailLength = 0) {
             }
         }
     } else {
-        mesh.quaternion.slerp(targetQuat, 0.15);
+        mesh.quaternion.slerp(_rTargetQuat, 0.15);
     }
 
     // Scale
     const targetScale = state.scale || 1;
-    mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+    _rScaleVec.set(targetScale, targetScale, targetScale);
+    mesh.scale.lerp(_rScaleVec, 0.1);
 
     // Invulnerability blinking (flags bit 1)
     const invulnerable = (state.flags & 0x02) !== 0;
@@ -225,9 +246,30 @@ export function updateRemotePlayer(entityId, state, dt, tailLength = 0) {
         const glowColor = glowColors[powerUpType] || 0xffffff;
         mesh.material.emissive.setHex(glowColor);
         mesh.material.emissiveIntensity = 0.5 + Math.sin(performance.now() * 0.005) * 0.2;
+    } else if (remote.sprinting && mesh.material && mesh.userData.glowColor) {
+        // Sprint glow — pulsing emissive + glow mesh + light (matches local player)
+        const sprintPulse = 0.6 + Math.sin(performance.now() * 0.003) * 0.15;
+        mesh.material.emissive.copy(mesh.userData.glowColor);
+        mesh.material.emissiveIntensity = 0.8 * sprintPulse;
     } else if (mesh.material && mesh.userData.glowColor) {
         mesh.material.emissive.copy(mesh.userData.glowColor).multiplyScalar(0.15);
         mesh.material.emissiveIntensity = 0.3;
+    }
+
+    // Animate glow mesh (sprint or power-up activates, otherwise fades)
+    if (remote.glowMesh) {
+        const parentScale = mesh.scale.x || 1;
+        const inverseScale = 1 / parentScale;
+        if (remote.sprinting || powerUpType > 0) {
+            const pulse = 0.6 + Math.sin(performance.now() * 0.003) * 0.15;
+            const targetOpacity = 0.4 * pulse;
+            remote.glowMesh.material.opacity += (targetOpacity - remote.glowMesh.material.opacity) * 0.25;
+            remote.glowMesh.scale.setScalar(inverseScale * 1.4);
+        } else {
+            remote.glowMesh.material.opacity *= 0.85;
+            const cur = remote.glowMesh.scale.x;
+            remote.glowMesh.scale.setScalar(cur + (inverseScale - cur) * 0.1);
+        }
     }
 
     // Store velocity for eye physics
@@ -236,30 +278,59 @@ export function updateRemotePlayer(entityId, state, dt, tailLength = 0) {
     remote.vz = state.vz || 0;
 
     // Tail: update position history and sync segment count
-    // Use minDistance to prevent history pollution when lerp converges between snapshots
     if (tail) {
-        tail.updatePositionHistory(mesh.position, 0.05);
+        // Clamp tail Y to ground level (match local player behavior in GameLoop.js)
+        const tailGroundY = 0.5 + scaleOffset;
+        const tailY = Math.max(mesh.position.y, tailGroundY);
+        _tailPos.set(mesh.position.x, tailY, mesh.position.z);
+        tail.updatePositionHistory(_tailPos, 0.05);
 
-        // Sync segment count — rate-limit to avoid visual oscillation
-        const MAX_REMOTE_TAIL_CHANGE = 2;
+        // Sync segment count from server-authoritative tailLength
+        // Rate-limit adds (like local player) so history can fill before segments need it
+        const MAX_REMOTE_TAIL_ADD = 2;
         const currentLen = tail.getLength();
         const diff = tailLength - currentLen;
         if (diff > 0) {
-            const toAdd = Math.min(diff, MAX_REMOTE_TAIL_CHANGE);
+            const toAdd = Math.min(diff, MAX_REMOTE_TAIL_ADD);
+            // Seed history backward so new segments don't collapse onto head
+            const historyNeeded = (currentLen + toAdd) * tail.segmentSpacing;
+            const historyHave = tail.positionHistory ? tail.positionHistory.length : 0;
+            if (historyHave < historyNeeded) {
+                // Extrapolate backward from current direction
+                const dx = remote.vx || 0;
+                const dz = remote.vz || 0;
+                const speed = Math.sqrt(dx * dx + dz * dz);
+                const dirX = speed > 0.1 ? -dx / speed : 0;
+                const dirZ = speed > 0.1 ? -dz / speed : 0;
+                const step = 0.15; // spacing between seeded points
+                const toSeed = historyNeeded - historyHave;
+                for (let i = 0; i < toSeed; i++) {
+                    const dist = (historyHave + i + 1) * step;
+                    tail.pushHistoryBack(
+                        _tailPos.x + dirX * dist,
+                        tailY,
+                        _tailPos.z + dirZ * dist
+                    );
+                }
+            }
             for (let i = 0; i < toAdd; i++) {
                 tail.addSegment(mesh.position.clone());
             }
         } else if (diff < 0) {
-            const toRemove = Math.min(-diff, MAX_REMOTE_TAIL_CHANGE);
-            tail.removeLastSegments(toRemove);
+            tail.removeLastSegments(-diff);
         }
 
-        // Sync glow state from power-up
+
+        // Sync glow state from power-up or sprint
         if (powerUpType > 0) {
             const glowColors = { 1: 0x4488ff, 2: 0xffffff, 3: 0x44ff44, 4: 0xff8800 };
             tail.glowState.isGlowing = true;
             tail.glowState.intensity = 0.8;
-            tail.glowState.color = new THREE.Color(glowColors[powerUpType] || 0xffffff);
+            tail.glowState.color = _rGlowColor.set(glowColors[powerUpType] || 0xffffff);
+        } else if (remote.sprinting) {
+            tail.glowState.isGlowing = true;
+            tail.glowState.intensity = 0.6 + Math.sin(performance.now() * 0.003) * 0.15;
+            tail.glowState.color = mesh.userData.glowColor || _rGlowColor.set(0xffffff);
         } else {
             tail.glowState.isGlowing = false;
         }

@@ -3,7 +3,7 @@
  * Handles death sequences, coin scattering, respawn, and invulnerability for any entity.
  */
 import * as THREE from 'three';
-import { eventBus } from './EventBus.js';
+import { eventBus } from '@jazaix/jx-sdk';
 import { COIN_SPAWN_AREA_XZ } from './PhysicsConfig.js';
 import { createLogger } from './Logger.js';
 
@@ -121,10 +121,10 @@ export class DeathManager {
             }
         }, 500);
 
-        // Respawn at random position
+        // Respawn at random position, high up for drop-in effect
         const spawnX = (Math.random() - 0.5) * COIN_SPAWN_AREA_XZ * 0.8;
         const spawnZ = (Math.random() - 0.5) * COIN_SPAWN_AREA_XZ * 0.8;
-        entity.body.setTranslation({ x: spawnX, y: 1.0, z: spawnZ }, true);
+        entity.body.setTranslation({ x: spawnX, y: 20.0, z: spawnZ }, true);
         entity.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         entity.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
 
@@ -144,7 +144,7 @@ export class DeathManager {
         });
         eventBus.emit('entity:spawned', {
             id: entityId,
-            position: { x: spawnX, y: 1.0, z: spawnZ },
+            position: { x: spawnX, y: 20.0, z: spawnZ },
             isBot: entity.isBot
         });
     }
@@ -221,10 +221,10 @@ export class DeathManager {
         // Restore original color
         entity.mesh.material.color.copy(entity.originalColor);
 
-        // Respawn at random position
+        // Respawn at random position, high up for drop-in effect
         const spawnX = (Math.random() - 0.5) * COIN_SPAWN_AREA_XZ * 0.8;
         const spawnZ = (Math.random() - 0.5) * COIN_SPAWN_AREA_XZ * 0.8;
-        entity.body.setTranslation({ x: spawnX, y: 1.0, z: spawnZ }, true);
+        entity.body.setTranslation({ x: spawnX, y: 20.0, z: spawnZ }, true);
         entity.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         entity.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     }
