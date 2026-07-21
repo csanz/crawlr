@@ -79,6 +79,8 @@ export const RING_STAMINA_PENALTY = 3;  // tail segments lost on contact
 // Round settings
 export const ROUND_DURATION = 600;  // 10 minutes in seconds
 
-// Network settings
-export const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'https://localhost:4433';
+// Network settings — prefer jx.config.js (production) over env vars (dev)
+const _jxConfig = typeof window !== 'undefined' && window.__JX_CONFIG__;
+export const SERVER_URL = (_jxConfig && _jxConfig.engineUrl)
+    || import.meta.env.VITE_SERVER_URL || 'https://localhost:4433';
 export const ADMIN_API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:4435';

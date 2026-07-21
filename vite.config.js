@@ -33,6 +33,10 @@ export const EventBus = s.EventBus;
 export const NetDebug = s.NetDebug;
 export const init = s.init;
 export const getGameKey = s.getGameKey;
+export const getConfig = s.getConfig;
+// Players service (jx-docs/prds/jx-players-service.md)
+export const installPlayersDecoder = s.installPlayersDecoder;
+export const createJxPlayer = s.createJxPlayer;
 export default s;`;
       }
     },
